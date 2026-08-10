@@ -1,0 +1,56 @@
+repos:
+  - repo: https://github.com/abravalheri/validate-pyproject
+    rev: v0.25
+    hooks:
+      - id: validate-pyproject
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: detect-private-key
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 'v0.15.20'
+    hooks:
+      - id: ruff-check
+        name: ruff
+        args: ['--fix']
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        args: ['-r', '-lll']
+
+  - repo: https://github.com/justmatias/hookpin
+    rev: v7.0.1
+    hooks:
+      - id: hookpin
+
+  - repo: https://github.com/pylint-dev/pylint
+    rev: v4.0.6
+    hooks:
+      - id: pylint
+        types: [python]
+        additional_dependencies:
+          - loguru==0.7.3
+          - pydantic==2.13.4
+          - pydantic-settings==2.14.2
+          - pytest==9.0.3
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.1.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - loguru==0.7.3
+          - pydantic==2.13.4
+          - pydantic-settings==2.14.2
+          - pytest==9.0.3

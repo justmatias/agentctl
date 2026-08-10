@@ -1,0 +1,38 @@
+name: Pre-commit autoupdate (scheduled)
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 6am UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  autoupdate:
+    name: Autoupdate pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.13'
+
+      - name: Autoupdate pre-commit hooks
+        run: uv run pre-commit autoupdate
+
+      - name: Sync uv additional dependencies
+        run: uv run pre-commit run hookpin --all-files || true
+
+      - name: Commit updated hooks
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git diff --staged --quiet || git commit -m "chore(config): autoupdate pre-commit hooks [skip ci]"
+          git push
