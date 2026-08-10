@@ -12,7 +12,7 @@ CLI surface (see §9): `agentctl status`, `agentctl why <key>`,
 Local agentic development setups (Claude Code, Codex CLI, OpenCode, Cursor, and
 similar tools) each maintain their own configuration surface: MCP server
 definitions, skills/plugins, slash commands, hooks, sub-agents, and
-instruction/memory files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, etc.).
+instruction/memory files (`CLAUDE.md`, `AGENTS.md`, `MEMORY.md`, `.cursorrules`, etc.).
 Each tool also applies its own scope hierarchy (project / user / global /
 managed) on top of its own file format (JSON, TOML, YAML, Markdown).
 
@@ -42,7 +42,7 @@ developer actually uses.
   an adapter.
 - Cover the full config surface a developer actually accumulates: MCP
   servers, skills/plugins, slash commands, hooks, sub-agents, and
-  memory/instruction files (CLAUDE.md, AGENTS.md, and equivalents).
+  memory/instruction files (CLAUDE.md, AGENTS.md, MEMORY.md, and equivalents).
 - Make scope (project/user/global/managed) visible and resolvable — show
   which file a given effective setting actually comes from.
 - Local-first: no required cloud account, no telemetry by default, all state
@@ -76,11 +76,11 @@ file layout and precedence rules.
 
 | Harness      | Priority | MCP config              | Memory/rules file        | Skills/Plugins        | Notes |
 |--------------|----------|--------------------------|---------------------------|------------------------|-------|
-| Claude Code  | v1       | `~/.claude.json`, `.claude/settings.json` (`mcpServers`, JSON) | `CLAUDE.md` (project + user) | `.claude/skills/`, plugins via marketplace | 5-layer scope: managed → CLI arg → local → project → user |
+| Claude Code  | v1       | `~/.claude.json`, `.claude/settings.json` (`mcpServers`, JSON) | `CLAUDE.md` (project + user), `MEMORY.md` (auto-memory) | `.claude/skills/`, plugins via marketplace | 5-layer scope: managed → CLI arg → local → project → user |
 | Codex CLI    | v1       | `~/.codex/config.toml` (`mcp_servers`, TOML) | `AGENTS.md` | skills under agent dirs | TOML, not JSON — needs its own parser |
 | OpenCode     | v1       | `~/.config/opencode/opencode.json` (typed local/remote entries) | `AGENTS.md`-style | `~/.config/opencode/skills` | |
-| Cursor       | v2       | `~/.cursor/mcp.json` | `.cursorrules` / `AGENTS.md` | `~/.cursor/skills` | |
-| Gemini CLI   | v2       | `~/.gemini/settings.json` | — | — | |
+| Cursor       | v1       | `~/.cursor/mcp.json`, `.cursor/mcp.json` | `.cursorrules` / `.cursor/rules/` / `AGENTS.md` | `~/.cursor/skills` | Project vs user scope |
+| Gemini CLI   | v2       | `~/.gemini/settings.json` | `GEMINI.md` | — | |
 | Hermes Agent | v3       | YAML under `~/.hermes/config.yaml` | — | categorized skill layout | |
 
 v1 = must-have at MVP. v2/v3 = roadmap, added via new adapters without core
@@ -99,11 +99,15 @@ distinct from a harness, with its own adapter that:
 - discovers `.agents/` at both global and project level, independent of
   whether any harness is installed,
 - reports, **per harness**, whether that harness actually consults
-  `.agents`/`AGENTS.md` (natively, via symlink, or not at all) — this must
-  be verified against each harness's own docs, not assumed,
+  `.agents`/`AGENTS.md` — one of `consulted` (natively or via symlink,
+  with its rank), `not_consulted`, or `unconfirmed`. This must be
+  verified against each harness's own docs, not assumed; `unconfirmed`
+  is the honest answer when it cannot be, and is a first-class state
+  (§7.10), not a stand-in for unfinished work,
 - feeds into the precedence chain (§7.10) as one more layer, positioned
   correctly relative to each harness's native files rather than always
-  assumed to be highest or lowest priority.
+  assumed to be highest or lowest priority — and, when `unconfirmed`,
+  shown outside the ordered stack and excluded from resolution.
 
 ## 6. Core Concepts
 
@@ -122,7 +126,13 @@ distinct from a harness, with its own adapter that:
 - **Drift** — a binding whose on-disk content no longer matches what the
   tool last wrote (edited outside the tool, or another sync tool touched it).
 - **Conflict** — the same logical extension (e.g. same MCP server name)
-  present with different definitions across harnesses or scopes.
+  present with different definitions across harnesses or scopes. Applies
+  to structured config, which the tool can compare field by field and
+  therefore ask the user to resolve.
+- **Divergent** — the weaker, informational counterpart of Conflict, used
+  for free-form prose (memory/instruction files): same-role files whose
+  normalized text differs. Reported with a diff, never queued for
+  resolution (§7.2).
 - **Source** — a generalization of "harness" to also cover `.agents`
   (§5.1), which isn't a runnable tool but does hold config that harnesses
   may or may not read. Everywhere this spec says "harness" for discovery
@@ -142,10 +152,23 @@ distinct from a harness, with its own adapter that:
 
 ### 7.2 Review & Conflict Resolution
 - Surface a diff when the same extension differs across harnesses/scopes.
-- Let the user pick a source of truth per conflict, or keep them
-  intentionally divergent (some settings should differ per project).
+- Let the user pick a source of truth per conflict, or **keep both
+  intentionally** (some settings should differ per project). That
+  resolution is persisted so the conflict stops reappearing.
 - Detect drift (on-disk change since last tool write) and let the user
   either adopt the drifted version or restore the tool's last-known state.
+- **Structured config vs. free-form prose are treated differently.**
+  Structured extensions (MCP servers) get full conflict records with the
+  resolution workflow above. Memory/instruction files get the weaker
+  `divergent` state instead (§6, §7.5): same-role files are compared as
+  text after normalizing line endings and trailing whitespace, and any
+  difference is reported informationally with a diff — no resolution
+  prompt, no auto-merge, no semantic "is this the same instruction
+  reworded" inference. Most memory files legitimately differ per harness;
+  treating that as a conflict to resolve would be noise.
+- Note the two terms are distinct: `divergent` is a *sync state* on a
+  binding; "keep both intentionally" is a *resolution* applied to a
+  `Conflict`.
 
 ### 7.3 CRUD
 - Create a new extension from the canonical view; choose which
@@ -162,15 +185,43 @@ distinct from a harness, with its own adapter that:
 - Toggle an extension on/off per harness without deleting it (write/remove
   the binding, keep the canonical record).
 
-### 7.5 Memory / instruction files (CLAUDE.md, AGENTS.md, etc.)
-- Treat these as first-class extensions, not just MCP/skills.
-- Support: view rendered + raw Markdown, edit in-app, and optionally
-  maintain one canonical "shared instructions" block that gets composed
-  into each harness's file alongside harness-specific sections (mirrors
-  how CLAUDE.md and AGENTS.md both take free-form Markdown but are loaded
-  by different tools).
-- Show which scope a given memory file is (project vs user) and, where the
+### 7.5 Memory & instruction files (CLAUDE.md, AGENTS.md, MEMORY.md, etc.)
+- Treat these as first-class extensions, covering two complementary categories:
+  1. **Developer instruction / rule files**: `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`,
+     `.cursorrules`, and equivalents — developer-authored guidelines, coding
+     standards, and repository architecture notes.
+  2. **Persistent memory files**: `MEMORY.md` (e.g. Claude Code's auto-memory under
+     `~/.claude/projects/<slug>/memory/MEMORY.md`, `.claude/memory/`, `.agents/memory/`,
+     or project root `MEMORY.md`) — agent-accumulated notes, session context, and
+     project state.
+- Support: view rendered + raw Markdown, edit in-app, and diff.
+- Show which scope a given memory/instruction file is (project vs user) and, where the
   harness supports it, which file wins for a given directory.
+
+**Decision: independent files + diff in v1; composition is opt-in later.**
+Each harness's memory file stays an independent file that the tool reads,
+edits, and diffs in place. The tool does not compose content across files
+in v1, and there is no shared-block write path to opt into yet.
+
+A canonical "shared instructions" block — one authored block composed into
+each harness's file alongside harness-specific sections — remains the more
+powerful model and is deferred to Phase 2 as an **explicit opt-in**,
+gated on two things: per-harness load semantics being verified by the
+adapter (does the harness concatenate, override, or truncate?), and the
+v1 write path (§7.3, §11) having proven itself.
+
+When composition does ship, it must be structurally reversible: the
+composed region is delimited by explicit `agentctl` begin/end markers,
+everything outside the markers is preserved byte-for-byte, and removing
+the block restores the file to a hand-maintained one. Rationale for not
+shipping it in v1: the failure mode of composition is that a user can no
+longer tell what a harness actually loaded, which is the exact problem
+§7.6 and §7.10 exist to solve. Duplicated instructions across files are
+an annoyance; unexplainable loaded context is a defect.
+
+The cost is accepted openly: until composition ships, a user who wants the
+same instruction in `CLAUDE.md` and `AGENTS.md` maintains it in both, with
+the diff view (§10) making the divergence visible.
 
 ### 7.6 Scope visibility
 - For any effective setting, show the resolved value **and** which file at
@@ -196,7 +247,7 @@ distinct from a harness, with its own adapter that:
 - **Add project**: an explicit user action — point the tool at a
   directory. The tool then scans that directory for any project-scope
   harness folders it recognizes (`.claude/`, `.codex/` if project-scoped,
-  `.cursor/`, project `.agents/`, root `CLAUDE.md`/`AGENTS.md`, etc.) plus
+  `.cursor/`, project `.agents/`, root `CLAUDE.md`/`AGENTS.md`/`MEMORY.md`, etc.) plus
   any nested harness config the adapters know to look for.
 - Registered projects are listed and switchable from the UI; no
   filesystem crawling to auto-discover projects the user hasn't pointed
@@ -206,6 +257,37 @@ distinct from a harness, with its own adapter that:
   mark which extensions come from global scope vs. this project.
 - Removing a project from the registry stops the tool from tracking it;
   it does not delete any files.
+
+**Decision: registration scopes tracking, not precedence.** Registering a
+project tells the tool *what to track and display*. It never changes what
+the precedence stack reports. The stack always mirrors what the harness
+actually does at that directory — including directory walk-up for files
+like `CLAUDE.md`/`AGENTS.md` — regardless of whether the ancestor
+directory happens to be registered.
+
+Consequences, which the implementation must honor:
+- A registered sub-project inside a registered monorepo shows the
+  ancestor's layers in its precedence stack **if and only if** the
+  harness genuinely reads them from that working directory. Registration
+  state is not an input to that computation.
+- An *unregistered* ancestor whose files the harness does read still
+  appears in the stack, labeled as coming from outside any registered
+  project, so the user can see config acting on them that the tool isn't
+  otherwise tracking.
+- A registered ancestor whose files the harness does *not* read from this
+  directory does not appear in the stack, however tempting the hierarchy
+  looks in the UI.
+- Walk-up semantics are **adapter-reported** (§9), never inferred from
+  the directory tree: how far a harness ascends, whether it stops at a
+  git root or home directory, and whether it concatenates or overrides
+  differ per tool. An adapter that cannot state its walk-up behavior
+  reports those layers as `unconfirmed` under the same rule as §7.10.
+
+Rationale: the tool's core promise is answering "which config actually
+wins." A precedence view whose output changes because the user registered
+or unregistered an unrelated directory would be reporting on agentctl's
+bookkeeping rather than on the machine, which is the one thing it must
+never do.
 
 ### 7.10 Precedence visualization
 - For a selected project (or the global view) and a chosen harness, show
@@ -224,6 +306,38 @@ distinct from a harness, with its own adapter that:
 - Clicking any layer in the stack opens that file/source directly in the
   editor panel (§10) — precedence understanding and editing are one
   action apart, not two separate views the user has to cross-reference.
+
+**Decision: unverified layers are shown as `unconfirmed`, outside the
+ordered stack, and excluded from resolution.** When an adapter cannot
+state whether its harness consults a source — the common case being
+`.agents`/`AGENTS.md` (§5.1), whose support varies per tool and changes
+over time — that layer:
+
+- is displayed, so the user can see the file exists and that the tool
+  looked at it rather than missing it;
+- is rendered in a visually distinct `unconfirmed` region, separate from
+  the ordered high-to-low stack, with no implied rank relative to the
+  confirmed layers;
+- **never participates in computing the winning layer.** The resolved
+  value reported by §7.6 comes only from confirmed layers. An unconfirmed
+  layer can never be named as the winner, and can never demote one.
+
+The three states an adapter reports for a source are therefore
+`consulted` (natively or via symlink, with its rank), `not_consulted`,
+and `unconfirmed` — the last being a real, displayable state, not a
+placeholder for a missing implementation.
+
+Rationale: the two failure modes are unequal. Omitting the layer hides a
+file that may well be loaded and makes the tool look like it did not
+check. Guessing a rank produces a confidently wrong ordering in the one
+view whose entire purpose is to be authoritative — and a user who acts on
+a wrong precedence order is worse off than one who was told the tool does
+not know. Showing the layer while refusing to rank it is the only option
+that is both complete and honest.
+
+An `unconfirmed` layer is a standing invitation to fix it: the UI links
+to the adapter's verification status so confirming a harness's real
+behavior upgrades the layer permanently.
 
 ### 7.11 Portability: bundle, version control, restore
 
@@ -276,6 +390,29 @@ It must:
 - Rationale for git over a bespoke snapshot store: the user already has
   git, it gives diff/blame/branch/remote for free, and the backup stays
   useful even if this tool is abandoned.
+
+**Decision: the commit log is snapshot history, not an audit trail.** Each
+commit means exactly one thing — "this was the state of your config when
+you ran `snapshot`." A single commit may contain many unrelated changes
+made outside the tool between snapshots, and the log says nothing about
+when or why any individual change happened.
+
+This must be stated, not merely implied:
+- The bundle's generated `README.md` says it in plain words, so the
+  distinction survives being read a year later by someone who wasn't
+  present for this decision.
+- The history UI (§10) labels the view as snapshots and dates them by
+  snapshot time, never presenting a commit as a record of a change event.
+- No feature may be built that depends on commits being per-change —
+  notably, "who changed this and when" is not a question this history can
+  answer, and the UI must not offer it.
+
+Rationale: the honest alternative was per-change commits from tool-recorded
+events, but that log could only ever cover changes made *through* agentctl.
+Config edited by hand or by another tool — the common case, and the reason
+drift detection exists at all — would be silently absent from something
+presented as complete. A history that is accurate about being coarse beats
+one that is misleading about being total.
 
 **Restore / apply on a new host.** Restore is a *plan*, not a copy:
 1. Read the bundle; detect which harnesses exist on *this* host.
@@ -492,14 +629,18 @@ Binding
   scope: enum [managed, local, project, user, global]   # harness-specific meaning
   file_path
   enabled: bool
-  sync_state: enum [in_sync, drifted, conflict, unmanaged]
+  sync_state: enum [in_sync, drifted, conflict, divergent, unmanaged]
+                          # `divergent` = informational text difference
+                          # between memory files (§7.2); never queued
+                          # for resolution
   last_written_hash
   last_seen_hash
 
-Conflict
+Conflict                        # structured config only (§7.2)
   extension_id -> Extension
   bindings: [Binding, Binding, ...]
   resolved_source_binding_id (nullable until resolved)
+  resolution: enum [unresolved, source_chosen, keep_both_intentionally]
 
 Project
   id
@@ -511,8 +652,16 @@ Project
 PrecedenceChain
   source: enum [claude_code, codex_cli, opencode, cursor, dot_agents, ...]
   project_id -> Project (nullable; null = global view)
-  layers: [ { scope, file_path, exists: bool, order_rank } ... ]  # ordered
-    high -> low precedence, as reported by that source's adapter
+  layers: [ { scope, file_path, exists: bool,
+              order_rank,              # null when status = unconfirmed
+              status: enum [consulted, not_consulted, unconfirmed],
+              origin: enum [registered_project, ancestor_dir, global],
+              resolves: bool           # false for unconfirmed layers,
+                                       # which never win and never demote
+            } ... ]                    # ordered high -> low precedence,
+                                       # as reported by that source's adapter
+    # `origin: ancestor_dir` covers harness directory walk-up (§7.9),
+    # included whether or not that ancestor is a registered project
 
 Bundle
   path (the git repo dir)
@@ -580,8 +729,10 @@ InstalledFrom                   # provenance for audit + bundle reproduction
   files, (b) given a registered project root, locating its project-scope
   config files there, (c) parsing them into canonical shape, (d)
   serializing canonical records back into its native format, (e) reporting
-  its own ordered precedence chain (`PrecedenceChain.layers`, §8) including
-  whether it consults `.agents`/`AGENTS.md` at all, and (f) declaring which
+  its own ordered precedence chain (`PrecedenceChain.layers`, §8) —
+  including its directory walk-up behavior (§7.9), its merge semantics
+  (override vs. concatenate), and a `consulted`/`not_consulted`/
+  `unconfirmed` status for `.agents`/`AGENTS.md` (§5.1) — and (f) declaring which
   workflow target forms it supports and with what limitations (§7.12.2), so
   the capability matrix is derived from adapters rather than hardcoded in
   the UI. Adding a harness = adding an adapter, not touching core logic.
@@ -594,6 +745,34 @@ InstalledFrom                   # provenance for audit + bundle reproduction
 - **Storage**: local embedded DB (SQLite) for canonical records, bindings,
   and sync state — not a replacement for the harness files themselves,
   which remain the actual runtime config.
+
+  **Decision: harness files are authoritative; the DB holds orchestration
+  metadata only.** The files on disk are the single runtime truth, because
+  they are what the harnesses actually read. The DB holds what the files
+  cannot express: sync state, `last_written_hash`/`last_seen_hash`, the
+  project registry, conflict resolutions, provenance, and canonical records
+  not yet bound anywhere.
+
+  Consequences the implementation must honor:
+  - **On any disagreement, disk wins.** A difference between DB and file is
+    never an error to reconcile away — it is drift (§7.2), a fact to report
+    to the user, and the DB is what gets corrected.
+  - **The DB is disposable.** Deleting it must lose no configuration: a
+    rescan rebuilds everything except unbound canonical records and
+    user decisions (adopted/unmanaged marks, conflict resolutions).
+    Those are the only DB-only state, and they are annotations *about*
+    config rather than config itself.
+  - **The tool is uninstallable without consequence.** Removing agentctl
+    leaves every harness working exactly as before, since nothing it wrote
+    depends on the DB existing.
+  - Reads for display always come from a scan, never from cached DB values
+    presented as current.
+
+  Rationale: the tool's core promise (§7.6, §7.10) is reporting what the
+  machine actually does. A DB treated as truth would eventually report its
+  own bookkeeping instead — and would make every hand-edit an error to
+  reconcile rather than a fact to surface, which inverts the relationship
+  the user wants.
 - **Frontend**: local web dashboard (served by the backend, opened in the
   default browser) rather than a packaged desktop app for v1 — faster to
   iterate on, avoids Electron/Tauri packaging overhead, still gives a full
@@ -617,14 +796,22 @@ InstalledFrom                   # provenance for audit + bundle reproduction
   layered diagram for the selected project + source, highest precedence
   on top, winning layer highlighted, overridden layers dimmed but present,
   each layer clickable straight into its editor panel. This is the primary
-  answer to "why is this setting not taking effect."
+  answer to "why is this setting not taking effect." Ancestor-directory
+  layers (§7.9) are labeled as such, and `unconfirmed` layers sit in a
+  visually separate region below the ordered stack — present and
+  clickable, but carrying no rank, with a link to the adapter's
+  verification status.
 - **Detail/editor panel** — per-extension form matching its type; raw
   JSON/TOML/Markdown escape hatch for power-user edits.
-- **Conflict resolution view** — side-by-side diff of divergent bindings
-  with a clear "keep left / keep right / keep both intentionally" action.
-- **Memory file editor** — Markdown editor with preview, section-level
-  diff against other harnesses'/`.agents`' memory files if a shared-block
-  model is used (§7.5).
+- **Conflict resolution view** — side-by-side diff of conflicting
+  bindings with a clear "keep left / keep right / keep both
+  intentionally" action. Structured config only; memory files surface as
+  `divergent` in the diff view below, with no resolution actions (§7.2).
+- **Memory file editor** — Markdown editor with preview and section-level
+  diff against other harnesses'/`.agents`' memory files. The diff is the
+  v1 answer to duplicated instructions (§7.5) — it is read-only
+  comparison, offering no "sync these" action until the composed-block
+  model ships in Phase 2.
 - **Bundle view** — export/snapshot actions, commit history with
   diff-between-snapshots, and a visible redaction report ("3 secrets
   replaced with placeholders") so the user can confirm nothing sensitive
@@ -701,15 +888,15 @@ InstalledFrom                   # provenance for audit + bundle reproduction
 
 ## 13. MVP Scope (Phase 1)
 
-1. Sources: Claude Code, Codex CLI, OpenCode, plus `.agents`/`AGENTS.md`
+1. Sources: Claude Code, Codex CLI, OpenCode, Cursor, plus `.agents`/`AGENTS.md`
    (§5.1) as its own source.
-2. Extension types: MCP servers, memory files (CLAUDE.md/AGENTS.md),
+2. Extension types: MCP servers, memory/instruction files (`CLAUDE.md`, `AGENTS.md`, `MEMORY.md`, `.cursorrules`),
    skills.
 3. Features: discovery/inventory, CRUD, enable/disable, drift detection,
    basic conflict view (manual resolution, no auto-merge).
 4. Global view + project registration (§7.9) — must ship in v1, since
    without it the precedence view below has nothing to anchor to.
-5. Precedence stack view (§7.10) for at least Claude Code and Codex CLI —
+5. Precedence stack view (§7.10) for Claude Code, Codex CLI, and Cursor —
    this is the feature that most directly answers "which config wins,"
    so it isn't deferrable to a later phase even though it's more UI work
    than a plain CRUD table.
@@ -720,8 +907,10 @@ InstalledFrom                   # provenance for audit + bundle reproduction
    bind to harnesses. Included in v1 because skills are already a managed
    type and `SKILL.md` needs no compilation layer; authoring is mostly
    the editor plus validation on top of binding logic that already exists.
-8. No profiles, no marketplace, no secret scanning, no daemon/watcher.
-9. Single local user, single machine.
+8. No profiles, no marketplace, no third-party code security scan pass, no daemon/watcher.
+9. No composed shared memory block (§7.5) — memory/instruction files are
+   independent files with a diff view in v1.
+10. Single local user, single machine.
 
 ### Phase 2
 - **Workflows** (§7.12.2) — deferred because the compilation layer and
@@ -735,7 +924,13 @@ InstalledFrom                   # provenance for audit + bundle reproduction
   land only once the write path and backup/rollback machinery are proven.
   Export-without-restore is still useful on its own: the bundle is plain
   files, so a user can copy them manually in the meantime.
-- Cursor + Gemini CLI adapters.
+- **Composed shared memory block** (§7.5), opt-in — one canonical block
+  written into each harness's memory file between explicit `agentctl`
+  markers, with everything outside the markers preserved byte-for-byte.
+  Deferred from v1 because it requires each adapter to have verified its
+  harness's load semantics (concatenate vs. override vs. truncate) and
+  because it is a write into files the user reads by hand.
+- Gemini CLI adapter.
 - **Federated marketplace, browse-only** (§7.13) — discovery, search,
   and normalized listing across registries, with install still handled
   by each harness's own CLI. Browse-only first because the index and
@@ -760,75 +955,81 @@ InstalledFrom                   # provenance for audit + bundle reproduction
   colleague is untrusted input and would need review-before-apply beyond
   what §7.11 specifies.
 
-## 14. Open Questions
+## 14. Decisions and Open Questions
 
-- Shared memory-file model (§7.5): compose from one canonical block, or
-  keep each harness's memory file fully independent with only a diff view?
-  Composition is more powerful but riskier (harder to reason about what
-  actually got loaded).
-- How aggressive should conflict detection be for memory files, given
-  they're free-form prose rather than structured config — text diff is
-  cheap, but "is this actually the same instruction reworded" is not.
-- Where to draw the line between "this tool's DB" and "the harness's own
-  files" as source of truth — leaning toward harness files always being
-  authoritative at runtime, DB only for orchestration metadata (sync
-  state, canonical records not yet bound anywhere).
-- What happens when a harness's actual `.agents`/`AGENTS.md` support is
-  unknown or unverified — show it in the precedence stack as "unconfirmed"
-  rather than guessing a position, or omit it until confirmed? Showing a
-  wrong precedence order would be worse than not showing one.
-- Registered projects that are nested inside each other (monorepo with
-  sub-project directories also registered individually) — does the
-  project view show only that directory's own scope, or walk up to
-  parent registered projects too? Needs a decision before the project
-  scanner is implemented, since it changes what "project scope" means.
-- Bundle vs. existing dotfiles repos: many users already track
-  `~/.claude/` in a personal dotfiles repo with stow/symlinks. Does the
-  bundle detect and refuse to fight that (read-only, warn), or offer to
-  co-exist? Writing into a symlinked path that points at a git repo the
-  user manages elsewhere is a real conflict scenario worth handling
-  explicitly rather than discovering in the field.
-- Project-scope config in a bundle is ambiguous on restore: the original
-  project may not exist on the new host, or may live at a different path.
-  Prompt for a path mapping per project, restore global-only by default,
-  or something else? Leaning toward global-only by default with projects
-  opt-in and path-mapped, since that's the least surprising.
-- Does the bundle track *history of the config* or *history of
-  snapshots*? They diverge if the user edits files outside the tool
-  between snapshots — the git log would show one commit containing many
-  unrelated changes. Acceptable for backup; misleading if presented as
-  an audit trail.
-- Is "Workflow" a distinct entity at all, or just a Skill with a step
-  list and inputs? Merging them keeps the model smaller and leans on the
-  most portable format; keeping them separate allows compiling to
-  non-skill forms (slash commands, sub-agents) where those are a better
-  fit. Currently specified as separate — worth revisiting once one
-  compiler exists, since if compilation to skills turns out to cover
-  90% of real use, the extra entity is unearned complexity.
-- Compiled workflow artefacts on a *shared* project: if a workflow
-  compiles into `.claude/commands/` inside a git-tracked project, a
-  teammate now has a generated file whose canonical source lives only on
-  the author's machine. Options: mark generated files with a header
-  comment, refuse to compile into tracked project scope by default, or
-  ship the canonical definition alongside. Needs deciding before
-  workflows target project scope at all.
-- Marketplace items installed via a harness's *own* CLI (outside this
-  tool) will appear as unmanaged extensions with no provenance. Attempt
-  to back-fill provenance by matching against known registries, or
-  accept that only tool-installed items are auditable? Back-filling is
-  guesswork; accepting the gap is honest but leaves a blind spot in the
-  security story.
-- Cross-harness install of an item a registry never intended for that
-  harness: a skill from a Claude-oriented collection will usually work
-  anywhere `SKILL.md` is read, but a plugin bundle will not decompose
-  cleanly. How aggressive should the tool be about offering install
-  targets beyond what the item declares? Permissive is more useful and
-  more likely to produce silently broken installs.
-- Does bundle export (§7.11) capture marketplace-installed items as
-  *content* or as *provenance + reinstall instruction*? Provenance is
-  smaller and keeps upstream authorship intact, but breaks if the source
-  disappears; content is self-contained but effectively vendors someone
-  else's code into the user's backup repo.
+### 14.1 Resolved
+
+Decided; the body sections above are authoritative and these entries
+record the reasoning so it isn't relitigated.
+
+| Question | Decision | Where | Blocks |
+|---|---|---|---|
+| Nested registered projects: own scope, or walk up? | **Registration scopes tracking, not precedence.** The stack always mirrors real harness behavior, including directory walk-up, whether or not the ancestor is registered. Walk-up semantics are adapter-reported. | §7.9 | PR 1.7 |
+| Shared memory-file model: composed block vs. independent + diff | **Independent files + diff in v1; composition is an explicit Phase 2 opt-in**, gated on verified per-harness load semantics and a proven write path, and structurally reversible via begin/end markers. | §7.5 | PR 1.13, PR 2.26–2.28 |
+| Harness `.agents`/`AGENTS.md` support unknown | **Show as `unconfirmed`**, outside the ordered stack, excluded from resolution — it can never win and never demote a confirmed layer. Omitting hides a possibly-loaded file; guessing produces a confidently wrong order in the one authoritative view. | §5.1, §7.10 | PR 1.5, PR 1.10 |
+| Memory-file conflict aggressiveness | **Normalized text compare → `divergent`, informational only.** No resolution prompt, no auto-merge, no semantic reworded-instruction inference. Full `Conflict` records stay for structured config. | §6, §7.2 | PR 1.9 |
+| DB vs. harness files as source of truth | **Harness files authoritative; DB is orchestration metadata only.** On disagreement disk wins, the DB is disposable and rebuildable by rescan, and removing agentctl leaves every harness working. | §9 | PR 0.2 |
+| Bundle history: config changes or snapshots? | **Snapshot history, stated plainly** in the bundle's generated README and in the history UI. No feature may assume commits are per-change. | §7.11 | PR 1.17 |
+
+### 14.2 Still open
+
+Each carries a stable `OQ-n` identifier. The PR that must resolve it
+references that identifier at the point of blockage in
+[ROADMAP.md](./ROADMAP.md), so a question is never rediscovered late.
+
+**OQ-1 — Project-scope restore path mapping.** *(blocks PR 2.5, §7.11)*
+Project-scope config in a bundle is ambiguous on restore: the original
+project may not exist on the new host, or may live at a different path.
+Prompt for a path mapping per project, restore global-only by default,
+or something else? Leaning toward global-only by default with projects
+opt-in and path-mapped, since that's the least surprising.
+
+**OQ-2 — Dotfiles-repo / symlink coexistence.** *(blocks PR 2.7, §7.11)*
+Many users already track `~/.claude/` in a personal dotfiles repo with
+stow/symlinks. Does the bundle detect and refuse to fight that
+(read-only, warn), or offer to co-exist? Writing into a symlinked path
+that points at a git repo the user manages elsewhere is a real conflict
+scenario worth handling explicitly rather than discovering in the field.
+
+**OQ-3 — Workflow as its own entity vs. a Skill variant.** *(revisit at
+PR 2.16, §7.12.2)* Is "Workflow" a distinct entity at all, or just a
+Skill with a step list and inputs? Merging them keeps the model smaller
+and leans on the most portable format; keeping them separate allows
+compiling to non-skill forms (slash commands, sub-agents) where those are
+a better fit. Currently specified as separate — deliberately left open
+until one compiler exists, since if compilation to skills turns out to
+cover 90% of real use, the extra entity is unearned complexity. Deciding
+this early would be guessing.
+
+**OQ-4 — Compiled artefacts inside tracked project scope.** *(blocks the
+first compiler that targets project scope — PR 2.16 onward, §7.12.2)*
+If a workflow compiles into `.claude/commands/` inside a
+git-tracked project, a teammate now has a generated file whose canonical
+source lives only on the author's machine. Options: mark generated files
+with a header comment, refuse to compile into tracked project scope by
+default, or ship the canonical definition alongside. Needs deciding
+before workflows target project scope at all.
+
+**OQ-5 — Provenance back-fill for externally installed items.** *(blocks
+PR 3.4, §7.13.4)* Marketplace items installed via a harness's *own* CLI
+(outside this tool) appear as unmanaged extensions with no provenance.
+Attempt to back-fill by matching against known registries, or accept that
+only tool-installed items are auditable? Back-filling is guesswork;
+accepting the gap is honest but leaves a blind spot in the security story.
+
+**OQ-6 — Cross-harness install targets beyond what an item declares.**
+*(blocks PR 3.2, §7.13.3)* A skill from a Claude-oriented collection will
+usually work anywhere `SKILL.md` is read, but a plugin bundle will not
+decompose cleanly. How aggressive should the tool be about offering
+install targets the item never declared? Permissive is more useful and
+more likely to produce silently broken installs.
+
+**OQ-7 — Bundle captures marketplace items as content vs. provenance.**
+*(blocks PR 3.4, §7.11, §7.13)* Does bundle export capture
+marketplace-installed items as *content* or as *provenance + reinstall
+instruction*? Provenance is smaller and keeps upstream authorship intact,
+but breaks if the source disappears; content is self-contained but
+effectively vendors someone else's code into the user's backup repo.
 
 ## 15. Appendix: Known Harness Config Locations (reference)
 
@@ -838,7 +1039,9 @@ Claude Code
   ~/.claude/settings.json        - user settings
   .claude/settings.json          - project settings (shared, checked in)
   .claude/settings.local.json    - project settings (local, gitignored)
-  CLAUDE.md (project + ~/.claude/CLAUDE.md) - memory
+  CLAUDE.md (project + ~/.claude/CLAUDE.md) - memory & instructions
+  ~/.claude/projects/<slug>/memory/MEMORY.md - user auto-memory per project
+  .claude/memory/MEMORY.md       - project-scoped auto-memory
   .claude/skills/                - skills
   ~/.claude/agents/               - sub-agents
   .claude/commands/               - slash commands
@@ -846,26 +1049,33 @@ Claude Code
 
 Codex CLI
   ~/.codex/config.toml           - MCP servers under [mcp_servers.*], TOML
-  AGENTS.md                      - memory
+  AGENTS.md                      - memory & instructions
 
 OpenCode
   ~/.config/opencode/opencode.json - MCP servers (typed local/remote)
   ~/.config/opencode/skills        - skills
   ~/.config/opencode/commands      - slash commands
+  AGENTS.md                        - memory & instructions
 
 Cursor
-  ~/.cursor/mcp.json              - MCP servers
-  .cursorrules / AGENTS.md        - memory
+  ~/.cursor/mcp.json              - global MCP servers
+  .cursor/mcp.json                - project MCP servers
+  .cursorrules / .cursor/rules/ / AGENTS.md - memory & instructions
   ~/.cursor/skills                - skills
   ~/.cursor/commands              - slash commands
+  Precedence: project (.cursor/) > user (~/.cursor/)
 
 Gemini CLI
   ~/.gemini/settings.json         - MCP servers + settings
+  GEMINI.md (project + user)      - memory & instructions
 
 Shared convention (.agents)
   ~/.agents/                      - global shared rules/commands/hooks/MCP
+  ~/.agents/memory/MEMORY.md      - global shared memory notes
   <project>/.agents/              - project-level equivalent
-  AGENTS.md (project root)        - memory file some harnesses read directly
+  <project>/.agents/memory/       - project-level shared memory notes
+  AGENTS.md (project root)        - instruction/rule file
+  MEMORY.md (project root)        - memory file
   NOTE: whether a given harness actually reads from .agents/AGENTS.md,
   vs. only its own native files, varies by tool and changes over time —
   this must be verified per adapter, not assumed uniform.

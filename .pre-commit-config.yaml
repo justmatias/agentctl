@@ -17,7 +17,7 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 'v0.15.20'
+    rev: 'v0.16.2'
     hooks:
       - id: ruff-check
         name: ruff
@@ -30,27 +30,27 @@ repos:
         args: ['-r', '-lll']
 
   - repo: https://github.com/justmatias/hookpin
-    rev: v7.0.1
+    rev: v7.0.2
     hooks:
       - id: hookpin
 
   - repo: https://github.com/pylint-dev/pylint
-    rev: v4.0.6
+    rev: v4.0.7
     hooks:
       - id: pylint
         types: [python]
         additional_dependencies:
           - loguru==0.7.3
           - pydantic==2.13.4
-          - pydantic-settings==2.14.2
-          - pytest==9.0.3
+          - pydantic-settings==2.15.0
+          - pytest==9.1.1
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.1.0
+    rev: v2.3.0
     hooks:
       - id: mypy
         additional_dependencies:
           - loguru==0.7.3
           - pydantic==2.13.4
-          - pydantic-settings==2.14.2
-          - pytest==9.0.3
+          - pydantic-settings==2.15.0
+          - pytest==9.1.1

@@ -152,14 +152,14 @@ jobs:
       - name: Get proposed version
         id: proposed
         run: |
-          VERSION=$(pipx run --spec python-semantic-release semantic-release --noop version --print)
+          VERSION=$(uvx --from python-semantic-release semantic-release --noop version --print)
           echo "proposed=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Run pycracks
         id: pycracks
         continue-on-error: true
         run: |
-          pipx run pycracks \
+          uvx pycracks \
             --path "tests" \
             --target-version "${{ steps.proposed.outputs.proposed }}" \
             --test-command "uv run poe test"
