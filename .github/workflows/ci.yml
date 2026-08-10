@@ -1,0 +1,229 @@
+name: CI
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  pr-title:
+    name: Standardize PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Sync title with single commit and validate format
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          COMMIT_COUNT=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json commits --jq '.commits | length')
+
+          if [ "$COMMIT_COUNT" -eq 1 ]; then
+            COMMIT_MSG=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json commits --jq '.commits[0].messageHeadline')
+            CURRENT_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+            if [ "$CURRENT_TITLE" != "$COMMIT_MSG" ]; then
+              echo "Renaming PR title to match its single commit: $COMMIT_MSG"
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$COMMIT_MSG"
+            fi
+            TITLE="$COMMIT_MSG"
+          else
+            TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+          fi
+
+          echo "Validating PR title: $TITLE"
+          PATTERN='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._-]+\))?!?: .+'
+          if ! echo "$TITLE" | grep -qE "$PATTERN"; then
+            echo "::error::PR title '$TITLE' does not follow Conventional Commits format, e.g. 'feat(scope): add thing'."
+            exit 1
+          fi
+
+  lint:
+    name: Lint (Python 3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.13'
+
+      - name: Run lint and format checks
+        run: uv run poe format
+
+  test:
+    name: Test (Python 3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.13'
+
+      - name: Run unit tests
+        run: uv run poe test
+
+  security:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.13'
+
+      - name: Run pip-audit
+        run: uvx pip-audit --local
+
+  update-hooks:
+    name: Update pre-commit hooks
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.13'
+
+      - name: Autoupdate pre-commit hooks
+        run: uv run pre-commit autoupdate
+
+      - name: Sync uv additional dependencies
+        run: uv run pre-commit run hookpin --all-files || true
+
+      - name: Commit updated hooks
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git diff --staged --quiet || git commit -m "chore(config): update pre-commit hooks"
+          git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+
+  breaking-changes:
+    name: Detect breaking changes
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [lint, test]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.13'
+
+      - name: Get proposed version
+        id: proposed
+        run: |
+          VERSION=$(pipx run --spec python-semantic-release semantic-release --noop version --print)
+          echo "proposed=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Run pycracks
+        id: pycracks
+        continue-on-error: true
+        run: |
+          pipx run pycracks \
+            --path "tests" \
+            --target-version "${{ steps.proposed.outputs.proposed }}" \
+            --test-command "uv run poe test"
+
+      - name: Create breaking change commit
+        if: steps.pycracks.outcome == 'failure'
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git commit --allow-empty \
+            -m "feat!: breaking change detected [skip ci]"
+          git push origin main
+
+  versioning:
+    name: Versioning
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [breaking-changes]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.13'
+
+      - name: Bump version and update changelog
+        id: release
+        uses: python-semantic-release/python-semantic-release@v9.21.1
+        with:
+          github_token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      version: ${{ steps.release.outputs.version }}
+
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && needs.versioning.outputs.released == 'true'
+    needs: [versioning]
+    environment:
+      name: pypi
+      url: https://pypi.org/p/agentctl
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.13'
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

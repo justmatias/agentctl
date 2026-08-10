@@ -1,0 +1,186 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentctl"
+version = "0.0.0"
+description = "Local-first control center for AI coding agents: unify MCP servers, skills, plugins and memory files, resolve precedence, snapshot to git."
+readme = "README.md"
+license = { text = "MIT" }
+
+authors = [
+  { name = "Matias Gimenez", email = "matiasgimenez.dev@gmail.com" },
+]
+requires-python = ">=3.13"
+dependencies = ["loguru>=0.7.3", "pydantic>=2.12.4", "pydantic-settings>=2.12"]
+
+
+[project.urls]
+repository = "https://github.com/justmatias/agentctl"
+
+[tool.setuptools]
+packages = ["agentctl"]
+
+[dependency-groups]
+dev = [
+  "poethepoet>=0.37",
+  "pre-commit>=4.4",
+  "pytest>=9.0.2",
+  "pytest-cov>=7.0.0",
+  "pytest-recording>=0.13.4",
+  "polyfactory>=2.14.0",
+  "inject>=5.3.0",
+]
+
+build = ["build>=1.0"]
+
+##################################
+# ruff configuration             #
+##################################
+
+[tool.ruff]
+line-length = 88
+exclude = [
+  ".git",
+  ".mypy_cache",
+  ".pyenv",
+  ".pytest_cache",
+  ".pytype",
+  ".ruff_cache",
+  ".venv",
+  ".vscode",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "playground",
+  "site-packages",
+  "venv",
+]
+
+preview = true
+fix = true
+format.indent-style = "space"
+format.quote-style = "double"
+format.line-ending = "auto"
+format.skip-magic-trailing-comma = false
+
+##################################
+# pylint configuration           #
+##################################
+
+[tool.pylint]
+disable = [
+  "missing-docstring",
+  "missing-module-docstring",
+  "missing-function-docstring",
+  "too-few-public-methods",
+  "astroid-error",
+  "consider-using-assignment-expr",
+  "redefined-outer-name",
+  "broad-exception-caught",
+  "import-error",
+]
+
+load-plugins = [
+  "pylint.extensions.bad_builtin",
+  "pylint.extensions.code_style",
+  "pylint.extensions.comparison_placement",
+  "pylint.extensions.consider_refactoring_into_while_condition",
+  "pylint.extensions.dunder",
+  "pylint.extensions.eq_without_hash",
+  "pylint.extensions.for_any_all",
+  "pylint.extensions.mccabe",
+  "pylint.extensions.no_self_use",
+  "pylint.extensions.overlapping_exceptions",
+  "pylint.extensions.private_import",
+  "pylint.extensions.redefined_loop_name",
+  "pylint.extensions.set_membership",
+]
+
+
+##################################
+# mypy configuration             #
+##################################
+
+[tool.mypy]
+python_version = "3.13"
+disallow_untyped_defs = true
+show_error_codes = true
+no_implicit_optional = true
+warn_return_any = true
+warn_unused_ignores = true
+disable_error_code = ["var-annotated"]
+
+
+##################################
+# coverage configuration         #
+##################################
+
+[tool.coverage.run]
+omit = ["agentctl/main.py", "agentctl/injections/*"]
+
+[tool.coverage.report]
+fail_under = 80
+
+##################################
+# poe tasks configuration        #
+##################################
+
+[tool.poe.tasks]
+dev = "uv run python -m agentctl.main"
+build = "pip install -e ."
+test = "pytest --cov=agentctl --cov-report=term-missing:skip-covered"
+
+[tool.poe.tasks.format]
+help = "Sync pre-commit hook pins with the lockfile, then lint and format"
+shell = "pre-commit run hookpin --all-files || true; pre-commit run --all-files --verbose"
+
+
+##################################
+# semantic release configuration #
+##################################
+
+[tool.semantic_release]
+branch = "main"
+commit_message = "chore(release): release version {version}"
+version_variables = ["agentctl/__init__.py:__version__"]
+
+[tool.semantic_release.branches.main]
+match = "(main|master)"
+prerelease_token = "rc"
+prerelease = false
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+
+[tool.semantic_release.commit_author]
+env = "GIT_COMMIT_AUTHOR"
+default = "semantic-release <semantic-release>"
+
+[tool.semantic_release.changelog.environment]
+block_start_string = "{%"
+block_end_string = "%}"
+variable_start_string = "{{"
+variable_end_string = "}}"
+comment_start_string = "{#"
+comment_end_string = "#}"
+trim_blocks = false
+lstrip_blocks = false
+newline_sequence = "\n"
+keep_trailing_newline = false
+extensions = []
+autoescape = true
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["chore", "docs", "feat", "fix", "refactor"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+default_bump_level = 0
+
+[tool.semantic_release.remote]
+name = "origin"
+type = "github"
+ignore_token_for_push = false
+insecure = false

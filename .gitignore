@@ -1,0 +1,36 @@
+# Environment variables
+.env
+.env.local
+
+# Data storage
+data/
+*.db
+*.sqlite3
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+develop-eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.spec
+.venv
+.uv
+
+# IDE settings
+.vscode/
+.idea/
+
+# Playground
+playground/
+
+# Tests
+.coverage
