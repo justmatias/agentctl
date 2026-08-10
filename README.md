@@ -34,8 +34,8 @@ it doesn't replace them.
   skills and memory files from one place. Atomic writes, timestamped backups,
   and only the keys `agentctl` owns are ever touched.
 - **Cross-harness binding** — one canonical record projected into as many
-  harnesses as you want. Edit once, propagate everywhere — or keep a binding
-  intentionally divergent when that's the point.
+  harnesses as you want. Edit once, propagate everywhere — or keep bindings
+  intentionally different when that's the point.
 - **Drift and conflict detection** — know when a file changed outside the tool,
   and diff the same extension across harnesses side by side.
 - **Skill authoring** — write `SKILL.md` once, with frontmatter validation, and
@@ -49,14 +49,14 @@ it doesn't replace them.
 
 ## Supported sources
 
-| Source | Phase | MCP config | Memory file | Skills |
+| Source | Phase | MCP config | Memory & Rules file | Skills |
 |---|---|---|---|---|
-| Claude Code | 1 | `~/.claude.json`, `.claude/settings.json` | `CLAUDE.md` | `.claude/skills/` |
+| Claude Code | 1 | `~/.claude.json`, `.claude/settings.json` | `CLAUDE.md`, `MEMORY.md` | `.claude/skills/` |
 | Codex CLI | 1 | `~/.codex/config.toml` | `AGENTS.md` | agent dirs |
 | OpenCode | 1 | `~/.config/opencode/opencode.json` | `AGENTS.md`-style | `~/.config/opencode/skills` |
-| `.agents` (shared convention) | 1 | `~/.agents/`, `<project>/.agents/` | `AGENTS.md` | — |
-| Cursor | 2 | `~/.cursor/mcp.json` | `.cursorrules` / `AGENTS.md` | `~/.cursor/skills` |
-| Gemini CLI | 2 | `~/.gemini/settings.json` | — | — |
+| Cursor | 1 | `~/.cursor/mcp.json`, `.cursor/mcp.json` | `.cursorrules` / `.cursor/rules/` / `AGENTS.md` | `~/.cursor/skills` |
+| `.agents` (shared convention) | 1 | `~/.agents/`, `<project>/.agents/` | `AGENTS.md`, `MEMORY.md` | — |
+| Gemini CLI | 2 | `~/.gemini/settings.json` | `GEMINI.md` | — |
 | Hermes Agent | 3 | `~/.hermes/config.yaml` | — | categorized |
 
 Each source is an adapter. Adding a harness means adding an adapter, not
