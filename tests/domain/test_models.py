@@ -19,6 +19,7 @@ from agentctl.domain import (
     Source,
     SyncState,
 )
+from tests.domain.conftest import assert_round_trips
 from tests.factories import make_extension
 
 
@@ -44,9 +45,7 @@ class TestExtensionRoundTrip:
     def test_round_trips_through_json(type_: ExtensionType, config: object) -> None:
         extension = make_extension(type=type_, canonical_config=config)
 
-        rebuilt = Extension.model_validate_json(extension.model_dump_json())
-
-        assert rebuilt == extension
+        assert_round_trips(extension)
 
 
 class TestExtensionValidation:
@@ -66,8 +65,7 @@ class TestExtensionValidation:
 
 class TestBinding:
     @staticmethod
-    def test_round_trips_through_json() -> None:
-        extension = make_extension()
+    def test_round_trips_through_json(extension: Extension) -> None:
         binding = Binding(
             extension_id=extension.id,
             harness=Source.CLAUDE_CODE,
@@ -76,15 +74,12 @@ class TestBinding:
             sync_state=SyncState.DRIFTED,
         )
 
-        rebuilt = Binding.model_validate_json(binding.model_dump_json())
-
-        assert rebuilt == binding
+        assert_round_trips(binding)
 
 
 class TestConflict:
     @staticmethod
-    def test_source_chosen_requires_resolved_binding_id() -> None:
-        extension = make_extension()
+    def test_source_chosen_requires_resolved_binding_id(extension: Extension) -> None:
         with pytest.raises(ValidationError):
             Conflict(
                 extension_id=extension.id,
@@ -93,8 +88,7 @@ class TestConflict:
             )
 
     @staticmethod
-    def test_unresolved_forbids_resolved_binding_id() -> None:
-        extension = make_extension()
+    def test_unresolved_forbids_resolved_binding_id(extension: Extension) -> None:
         binding = Binding(
             extension_id=extension.id,
             harness=Source.CLAUDE_CODE,
@@ -110,17 +104,14 @@ class TestConflict:
             )
 
     @staticmethod
-    def test_keep_both_intentionally_round_trips() -> None:
-        extension = make_extension()
+    def test_keep_both_intentionally_round_trips(extension: Extension) -> None:
         conflict = Conflict(
             extension_id=extension.id,
             binding_ids=[],
             resolution=ConflictResolution.KEEP_BOTH_INTENTIONALLY,
         )
 
-        rebuilt = Conflict.model_validate_json(conflict.model_dump_json())
-
-        assert rebuilt == conflict
+        assert_round_trips(conflict)
 
 
 class TestProject:
@@ -133,9 +124,7 @@ class TestProject:
     def test_round_trips_through_json() -> None:
         project = Project(path="/home/user/code/demo", display_name="demo")
 
-        rebuilt = Project.model_validate_json(project.model_dump_json())
-
-        assert rebuilt == project
+        assert_round_trips(project)
 
 
 class TestPrecedenceChain:
@@ -223,6 +212,4 @@ class TestPrecedenceChain:
         )
         chain = PrecedenceChain(source=Source.CLAUDE_CODE, layers=[layer])
 
-        rebuilt = PrecedenceChain.model_validate_json(chain.model_dump_json())
-
-        assert rebuilt == chain
+        assert_round_trips(chain)

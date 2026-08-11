@@ -42,7 +42,13 @@ class Extension(BaseModel):
 
     @model_validator(mode="after")
     def _validate_canonical_config_matches_type(self) -> "Extension":
-        expected = _CANONICAL_CONFIG_TYPES[self.type]
+        expected = _CANONICAL_CONFIG_TYPES.get(self.type)
+        if expected is None:
+            # ValueError (not KeyError) is required: pydantic only wraps
+            # ValueError/AssertionError from validators into ValidationError.
+            raise ValueError(
+                f"no canonical config type registered for {self.type.value!r}"
+            )
         if not isinstance(self.canonical_config, expected):
             # ValueError (not TypeError) is required: pydantic only wraps
             # ValueError/AssertionError from validators into ValidationError.
