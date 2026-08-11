@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from agentctl.writes import merge_json_keys
 
 
@@ -55,3 +57,11 @@ class TestMergeJsonKeys:
         merge_json_keys(target, {"mcpServers": {}})
 
         assert list(json.loads(target.read_text()).keys()) == ["theme", "mcpServers"]
+
+    @staticmethod
+    def test_raises_when_root_is_not_an_object(tmp_path: Path) -> None:
+        target = tmp_path / "settings.json"
+        target.write_text(json.dumps(["not", "an", "object"]))
+
+        with pytest.raises(TypeError):
+            merge_json_keys(target, {"mcpServers": {}})

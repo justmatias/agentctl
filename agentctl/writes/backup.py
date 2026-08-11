@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from agentctl.utils import logger
+
 from .atomic import atomic_write
 
 
@@ -36,13 +38,15 @@ class RollbackIndex:
         path = Path(path)
         if not path.exists():
             return None
-        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
-        backup_path = self._backup_dir / f"{path.name}.{timestamp}.{len(self._backups)}.bak"
-        backup_path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
-        record = Backup(
-            original_path=path, backup_path=backup_path, created_at=datetime.now(UTC)
+        now = datetime.now(UTC)
+        timestamp = now.strftime("%Y%m%dT%H%M%S%f")
+        backup_path = (
+            self._backup_dir / f"{path.name}.{timestamp}.{len(self._backups)}.bak"
         )
+        atomic_write(backup_path, path.read_text(encoding="utf-8"))
+        record = Backup(original_path=path, backup_path=backup_path, created_at=now)
         self._backups.append(record)
+        logger.info(f"Backed up {path} to {backup_path}")
         return record
 
     def restore(self, path: Path | str) -> bool:
@@ -51,11 +55,15 @@ class RollbackIndex:
         for record in reversed(self._backups):
             if record.original_path == path:
                 atomic_write(path, record.backup_path.read_text(encoding="utf-8"))
+                logger.info(f"Restored {path} from {record.backup_path}")
                 return True
         return False
 
     def restore_all(self) -> None:
         """Undo every write this session, most recent first, then clear the index."""
         for record in reversed(self._backups):
-            atomic_write(record.original_path, record.backup_path.read_text(encoding="utf-8"))
+            atomic_write(
+                record.original_path, record.backup_path.read_text(encoding="utf-8")
+            )
+            logger.info(f"Restored {record.original_path} from {record.backup_path}")
         self._backups.clear()

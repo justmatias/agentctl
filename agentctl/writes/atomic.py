@@ -1,8 +1,11 @@
 """Atomic write primitive: temp file + os.replace (SPECS.md §7.3, §11)."""
 
 import os
+import stat
 import tempfile
 from pathlib import Path
+
+from agentctl.utils import logger
 
 
 def _write_to_temp(tmp_path: Path, content: str, encoding: str) -> None:
@@ -30,7 +33,10 @@ def atomic_write(path: Path | str, content: str, *, encoding: str = "utf-8") -> 
     tmp_path = Path(tmp_name)
     try:
         _write_to_temp(tmp_path, content, encoding)
+        if path.exists():
+            os.chmod(tmp_path, stat.S_IMODE(os.stat(path).st_mode))
         os.replace(tmp_path, path)
     except BaseException:
         tmp_path.unlink(missing_ok=True)
         raise
+    logger.debug(f"Atomically wrote {path}")
