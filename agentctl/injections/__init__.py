@@ -3,6 +3,7 @@
 import inject
 
 from .config import InjectionConfig
+from .core import configure_core_service_injection
 from .sample import configure_sample_injection
 
 
@@ -17,6 +18,7 @@ def _configure_bindings(binder: inject.Binder, config: InjectionConfig) -> None:
         config: The injection configuration (PRODUCTION or TEST)
     """
     configure_sample_injection(binder, config)
+    configure_core_service_injection(binder, config)
 
 
 def setup_injections(config: InjectionConfig = InjectionConfig.PRODUCTION) -> None:
