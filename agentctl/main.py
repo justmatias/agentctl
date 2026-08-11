@@ -1,9 +1,12 @@
 import uvicorn
 
+from agentctl.utils import logger
+
 from .app import create_app
 
 
 def main() -> None:
+    logger.info("Starting agentctl server on 127.0.0.1:8000")
     uvicorn.run(create_app(), host="127.0.0.1", port=8000)
 
 

@@ -4,14 +4,20 @@ Surface matches SPECS.md §9 and the Phase-1 roadmap: `status`, `why`,
 `project add/list/remove`, `snapshot`, `restore`, `ui`.
 """
 
+import json
+
 import typer
+
+from agentctl.utils import logger
 
 app = typer.Typer(
     name="agentctl",
     help="Local-first control center for AI coding agents.",
     no_args_is_help=True,
 )
-project_app = typer.Typer(help="Register, list, and unregister project paths (SPECS.md §7.9).")
+project_app = typer.Typer(
+    help="Register, list, and unregister project paths (SPECS.md §7.9)."
+)
 app.add_typer(project_app, name="project")
 
 
@@ -26,8 +32,9 @@ def main(
 
 
 def _not_yet_implemented(ctx: typer.Context, command: str) -> None:
+    logger.info(f"Dispatched CLI command: {command}")
     if ctx.obj["json"]:
-        typer.echo(f'{{"command": "{command}", "status": "not_yet_implemented"}}')
+        typer.echo(json.dumps({"command": command, "status": "not_yet_implemented"}))
     else:
         typer.echo(f"{command}: not yet implemented")
 

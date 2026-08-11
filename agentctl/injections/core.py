@@ -15,7 +15,9 @@ PRODUCTION_DB_PATH = Path.home() / ".agentctl" / "agentctl.db"
 
 def production_core_service() -> CoreService:
     PRODUCTION_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    return CoreService(registry=AdapterRegistry(), database=Database(PRODUCTION_DB_PATH))
+    return CoreService(
+        registry=AdapterRegistry(), database=Database(PRODUCTION_DB_PATH)
+    )
 
 
 def test_core_service() -> CoreService:
@@ -28,5 +30,7 @@ CORE_SERVICE_INJECTION = {
 }
 
 
-def configure_core_service_injection(binder: inject.Binder, config: InjectionConfig) -> None:
-    binder.bind_to_provider(CoreService, CORE_SERVICE_INJECTION[config])
+def configure_core_service_injection(
+    binder: inject.Binder, config: InjectionConfig
+) -> None:
+    binder.bind_to_constructor(CoreService, CORE_SERVICE_INJECTION[config])
