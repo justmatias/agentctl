@@ -1,10 +1,8 @@
-"""Enums shared by the Phase-0 domain model (SPECS.md §8)."""
-
 from enum import Enum
 
 
 class ExtensionType(str, Enum):
-    """Managed config object types with a canonical shape in v1 (SPECS §13.2)."""
+    """Managed config object types with a canonical shape in v1"""
 
     MCP_SERVER = "mcp_server"
     MEMORY_FILE = "memory_file"
@@ -12,7 +10,7 @@ class ExtensionType(str, Enum):
 
 
 class Source(str, Enum):
-    """A harness, or a non-runnable shared source such as `.agents` (SPECS §6)."""
+    """A harness, or a non-runnable shared source such as .agents"""
 
     CLAUDE_CODE = "claude_code"
     CODEX_CLI = "codex_cli"
@@ -22,7 +20,7 @@ class Source(str, Enum):
 
 
 class Scope(str, Enum):
-    """Where a binding lives on disk relative to precedence (SPECS §6)."""
+    """Where a binding lives on disk relative to precedence"""
 
     MANAGED = "managed"
     LOCAL = "local"
@@ -42,7 +40,7 @@ class SyncState(str, Enum):
 
 
 class LayerStatus(str, Enum):
-    """Whether an adapter has verified a source is consulted (SPECS §7.10)."""
+    """Whether an adapter has verified a source is consulted"""
 
     CONSULTED = "consulted"
     NOT_CONSULTED = "not_consulted"
@@ -50,7 +48,7 @@ class LayerStatus(str, Enum):
 
 
 class LayerOrigin(str, Enum):
-    """Where a precedence layer's directory comes from (SPECS §7.9)."""
+    """Where a precedence layer's directory comes from"""
 
     REGISTERED_PROJECT = "registered_project"
     ANCESTOR_DIR = "ancestor_dir"
@@ -58,7 +56,7 @@ class LayerOrigin(str, Enum):
 
 
 class ConflictResolution(str, Enum):
-    """How a structured-config Conflict was resolved (SPECS §7.2)."""
+    """How a structured-config Conflict was resolved"""
 
     UNRESOLVED = "unresolved"
     SOURCE_CHOSEN = "source_chosen"

@@ -1,5 +1,3 @@
-"""Pydantic domain models for the Phase-0 subset of SPECS.md §8."""
-
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -22,7 +20,7 @@ from .enums import (
     SyncState,
 )
 
-_CANONICAL_CONFIG_TYPES: dict[ExtensionType, type[CanonicalConfig]] = {
+CANONICAL_CONFIG_TYPES: dict[ExtensionType, type[CanonicalConfig]] = {
     ExtensionType.MCP_SERVER: McpServerConfig,
     ExtensionType.MEMORY_FILE: MemoryFileConfig,
     ExtensionType.SKILL: SkillConfig,
@@ -42,7 +40,7 @@ class Extension(BaseModel):
 
     @model_validator(mode="after")
     def _validate_canonical_config_matches_type(self) -> "Extension":
-        expected = _CANONICAL_CONFIG_TYPES.get(self.type)
+        expected = CANONICAL_CONFIG_TYPES.get(self.type)
         if expected is None:
             # ValueError (not KeyError) is required: pydantic only wraps
             # ValueError/AssertionError from validators into ValidationError.

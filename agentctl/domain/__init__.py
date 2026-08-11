@@ -1,5 +1,3 @@
-"""Phase-0 domain model: enums, canonical config shapes, and core records."""
-
 from .canonical_configs import (
     CanonicalConfig,
     McpServerConfig,

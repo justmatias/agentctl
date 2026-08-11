@@ -1,6 +1,4 @@
-"""Normalized, harness-independent config shapes per extension type (SPECS.md §8, §13.2)."""
-
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class McpServerConfig(BaseModel):
@@ -22,18 +20,18 @@ class McpServerConfig(BaseModel):
 
 
 class MemoryFileConfig(BaseModel):
-    """Canonical shape for a memory/instruction file (SPECS §7.5)."""
+    """Canonical shape for a memory/instruction file"""
 
     model_config = ConfigDict(extra="forbid")
 
     content: str
-    is_persistent_memory: bool
-    """True for agent-accumulated memory (e.g. MEMORY.md); False for
-    developer-authored instruction/rule files (e.g. CLAUDE.md, AGENTS.md)."""
+    is_persistent_memory: bool = Field(
+        description="True for agent-accumulated memory eg. MEMORY.MD"
+    )
 
 
 class SkillConfig(BaseModel):
-    """Canonical shape for a `SKILL.md`-style skill (SPECS §7.12.1)."""
+    """Canonical shape for a SKILL.md-style skill"""
 
     model_config = ConfigDict(extra="forbid")
 
