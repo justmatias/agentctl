@@ -1,6 +1,7 @@
 """Adapter registry: register, look up, and enumerate SourceAdapters (ROADMAP.md PR 0.4)."""
 
 from agentctl.domain import Source
+from agentctl.utils import logger
 
 from .protocol import SourceAdapter
 
@@ -16,10 +17,24 @@ class AdapterRegistry:
         self._adapters: dict[Source, SourceAdapter] = {}
 
     def register(self, adapter: SourceAdapter) -> None:
+        if not isinstance(adapter, SourceAdapter):
+            raise TypeError(
+                f"{adapter!r} does not implement the SourceAdapter protocol"
+            )
+        if adapter.source != adapter.capabilities.source:
+            raise ValueError(
+                f"adapter.source ({adapter.source!r}) does not match "
+                f"adapter.capabilities.source ({adapter.capabilities.source!r})"
+            )
+        if adapter.source in self._adapters:
+            logger.warning(f"Replacing already-registered adapter for {adapter.source}")
+        else:
+            logger.info(f"Registered adapter for {adapter.source}")
         self._adapters[adapter.source] = adapter
 
     def unregister(self, source: Source) -> None:
-        self._adapters.pop(source, None)
+        if self._adapters.pop(source, None) is not None:
+            logger.info(f"Unregistered adapter for {source}")
 
     def get(self, source: Source) -> SourceAdapter | None:
         return self._adapters.get(source)

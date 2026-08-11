@@ -42,29 +42,26 @@ class NullAdapter:
         return []
 
     @staticmethod
-    def locate_project_config(project_root: Path) -> list[Path]:
-        del project_root
+    def locate_project_config(_project_root: Path) -> list[Path]:
         return []
 
     @staticmethod
-    def parse(path: Path) -> list[Extension]:
-        del path
+    def parse(_path: Path) -> list[Extension]:
         return []
 
     @staticmethod
-    def serialize(extension: Extension) -> str:
-        del extension
+    def serialize(_extension: Extension) -> str:
         return ""
 
     @staticmethod
-    def walk_up_behavior(extension_type: ExtensionType) -> WalkUpBehavior:
-        del extension_type
+    def walk_up_behavior(_extension_type: ExtensionType) -> WalkUpBehavior:
         return WalkUpBehavior(
-            ascends=False, stops_at=WalkUpStop.NONE, merge_semantics=MergeSemantics.OVERRIDE
+            ascends=False,
+            stops_at=WalkUpStop.NONE,
+            merge_semantics=MergeSemantics.OVERRIDE,
         )
 
-    def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
-        del project_root
+    def precedence_chain(self, _project_root: Path | None) -> PrecedenceChain:
         return PrecedenceChain(source=self.source, project_id=None, layers=[])
 
     @property
