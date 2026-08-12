@@ -6,13 +6,6 @@ from pathlib import Path
 from agentctl.utils import logger
 
 
-def _write_to_temp(tmp_path: Path, content: str, encoding: str) -> None:
-    with open(tmp_path, "w", encoding=encoding) as handle:
-        handle.write(content)
-        handle.flush()
-        os.fsync(handle.fileno())
-
-
 def atomic_write(path: Path | str, content: str, *, encoding: str = "utf-8") -> None:
     """Write `content` to `path` so a reader never observes a partial write.
 
@@ -30,7 +23,10 @@ def atomic_write(path: Path | str, content: str, *, encoding: str = "utf-8") -> 
     os.close(fd)
     tmp_path = Path(tmp_name)
     try:
-        _write_to_temp(tmp_path, content, encoding)
+        with open(tmp_path, "w", encoding=encoding) as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
         if path.exists():
             os.chmod(tmp_path, stat.S_IMODE(os.stat(path).st_mode))
         os.replace(tmp_path, path)

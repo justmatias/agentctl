@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from agentctl.writes import atomic
 from agentctl.writes.atomic import atomic_write
 
 
@@ -34,17 +33,11 @@ def test_leaves_no_temp_file_behind(tmp_path: Path, target: Path) -> None:
     assert list(tmp_path.iterdir()) == [target]
 
 
+@pytest.mark.usefixtures("_fail_fsync")
 def test_interrupted_write_leaves_original_file_untouched(
-    tmp_path: Path, target: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, target: Path
 ) -> None:
     target.write_text("original")
-
-    def failing_write(tmp_path_arg: Path, content: str, encoding: str) -> None:
-        del content
-        tmp_path_arg.write_text("partial", encoding=encoding)
-        raise OSError("disk full")
-
-    monkeypatch.setattr(atomic, "_write_to_temp", failing_write)
 
     with pytest.raises(OSError, match="disk full"):
         atomic_write(target, "new content")
@@ -53,15 +46,10 @@ def test_interrupted_write_leaves_original_file_untouched(
     assert list(tmp_path.iterdir()) == [target]
 
 
+@pytest.mark.usefixtures("_fail_fsync")
 def test_interrupted_write_on_new_file_creates_nothing(
-    tmp_path: Path, target: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, target: Path
 ) -> None:
-    def failing_write(tmp_path_arg: Path, content: str, encoding: str) -> None:
-        del tmp_path_arg, content, encoding
-        raise OSError("disk full")
-
-    monkeypatch.setattr(atomic, "_write_to_temp", failing_write)
-
     with pytest.raises(OSError, match="disk full"):
         atomic_write(target, "new content")
 
