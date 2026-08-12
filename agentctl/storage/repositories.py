@@ -1,0 +1,32 @@
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Protocol
+from uuid import UUID
+
+type FilterValue = str | int | float | bool | UUID | Path | Enum | datetime | None
+
+
+class Repository[T](Protocol):
+    """Shared shape for every sqlite repository.
+
+    Structural, not nominal: each concrete repository (`Extension`,
+    `Binding`, `Conflict`, `Project`, `PrecedenceChain`) satisfies this as
+    `Repository[Extension]` etc. simply by having the right methods — a
+    Protocol needs no inheritance to be satisfied.
+
+    `get`/`delete` are keyed by a single `id`, matching the common case.
+    `find`/`find_one`/`delete_where` take arbitrary column filters, which is
+    what a repository keyed differently (`PrecedenceChain`, by
+    `(source, project_id)`) uses instead.
+    """
+
+    def create(self, item: T) -> None: ...
+    def get(self, item_id: UUID) -> T | None: ...
+    def find(self, **filters: FilterValue) -> list[T]: ...
+    def find_one(self, **filters: FilterValue) -> T | None: ...
+    def list(self, *, order_by: str | None = None) -> list[T]: ...
+    def update(self, item: T) -> None: ...
+    def upsert(self, item: T) -> None: ...
+    def delete(self, item_id: UUID) -> None: ...
+    def delete_where(self, **filters: FilterValue) -> None: ...

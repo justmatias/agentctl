@@ -1,1 +1,1 @@
-pytest_plugins = ["tests.factories"]
+pytest_plugins = ["tests.polyfactory", "tests.factories"]

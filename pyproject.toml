@@ -13,7 +13,13 @@ authors = [
   { name = "Matias Gimenez", email = "matiasgimenez.dev@gmail.com" },
 ]
 requires-python = ">=3.13"
-dependencies = ["loguru>=0.7.3", "pydantic>=2.12.4", "pydantic-settings>=2.12"]
+dependencies = [
+    "loguru>=0.7.3",
+    "pydantic>=2.12.4",
+    "pydantic-settings>=2.12",
+    "sqlalchemy>=2.0.52",
+    "sqlmodel>=0.0.39",
+]
 
 
 [project.urls]
