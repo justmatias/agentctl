@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v2.0.0 (2026-08-12)
+
+### Features
+
+- Breaking change detected [skip ci]
+  ([`0ea6a8a`](https://github.com/justmatias/agentctl/commit/0ea6a8a2740e8787e8150901b52e393f1129770d))
+
+
 ## v1.0.0 (2026-08-10)
 
 ### Chores
