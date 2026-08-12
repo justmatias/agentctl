@@ -15,49 +15,40 @@ EXPECTED_TABLES = {
 }
 
 
-class TestMigrations:
-    @staticmethod
-    def test_empty_db_migrates_to_current_schema(tmp_path: Path) -> None:
-        db = Database(tmp_path / "test.db")
-        try:
-            tables = {
-                row[0]
-                for row in db.connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type = 'table'"
-                )
-            }
-            assert EXPECTED_TABLES <= tables
+def test_empty_database_migrates_to_current_schema(database_path: Path) -> None:
+    with Database(database_path) as database:
+        tables = {
+            row[0]
+            for row in database.connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        assert EXPECTED_TABLES <= tables
 
-            applied_versions = {
-                row[0]
-                for row in db.connection.execute(
-                    "SELECT version FROM schema_migrations"
-                )
-            }
-            assert applied_versions == {migration.version for migration in MIGRATIONS}
-        finally:
-            db.close()
+        applied_versions = {
+            row[0]
+            for row in database.connection.execute(
+                "SELECT version FROM schema_migrations"
+            )
+        }
+        assert applied_versions == {migration.version for migration in MIGRATIONS}
 
-    @staticmethod
-    def test_reopening_an_already_migrated_db_does_not_reapply(
-        tmp_path: Path,
-    ) -> None:
-        db_path = tmp_path / "test.db"
-        Database(db_path).close()
 
-        db = Database(db_path)
-        try:
-            count = db.connection.execute(
-                "SELECT COUNT(*) FROM schema_migrations"
-            ).fetchone()[0]
-            assert count == len(MIGRATIONS)
-        finally:
-            db.close()
+def test_reopening_an_already_migrated_database_does_not_reapply(
+    database_path: Path,
+) -> None:
+    Database(database_path).close()
 
-    @staticmethod
-    def test_used_as_a_context_manager(tmp_path: Path) -> None:
-        with Database(tmp_path / "test.db") as db:
-            db.connection.execute("SELECT 1")
+    with Database(database_path) as database:
+        count = database.connection.execute(
+            "SELECT COUNT(*) FROM schema_migrations"
+        ).fetchone()[0]
+        assert count == len(MIGRATIONS)
 
-        with pytest.raises(sqlite3.ProgrammingError):
-            db.connection.execute("SELECT 1")
+
+def test_used_as_a_context_manager(database_path: Path) -> None:
+    with Database(database_path) as database:
+        database.connection.execute("SELECT 1")
+
+    with pytest.raises(sqlite3.ProgrammingError):
+        database.connection.execute("SELECT 1")
