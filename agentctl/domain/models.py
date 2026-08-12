@@ -1,16 +1,18 @@
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator, model_validator
-
-from .canonical_configs import (
-    CanonicalConfig,
-    McpServerConfig,
-    MemoryFileConfig,
-    SkillConfig,
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
 )
+
+from .canonical_configs import CanonicalConfig
 from .enums import (
     ConflictResolution,
     ExtensionType,
@@ -21,38 +23,21 @@ from .enums import (
     SyncState,
 )
 
-CANONICAL_CONFIG_TYPES: dict[ExtensionType, type[CanonicalConfig]] = {
-    ExtensionType.MCP_SERVER: McpServerConfig,
-    ExtensionType.MEMORY_FILE: MemoryFileConfig,
-    ExtensionType.SKILL: SkillConfig,
-}
-
 
 class Extension(BaseModel):
     """A managed config object, normalized independent of harness format."""
 
     id: UUID = Field(default_factory=uuid4)
-    type: ExtensionType
     name: str
     origin_harness: Source | None = None
     canonical_config: CanonicalConfig
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    @model_validator(mode="after")
-    def _validate_canonical_config_matches_type(self) -> Self:
-        expected = CANONICAL_CONFIG_TYPES.get(self.type)
-        if not expected:
-            raise ValueError(
-                f"no canonical config type registered for {self.type.value!r}"
-            )
-
-        if not isinstance(self.canonical_config, expected):
-            raise ValueError(  # noqa: TRY004
-                f"canonical_config must be {expected.__name__} for type "
-                f"{self.type.value!r}, got {type(self.canonical_config).__name__}"
-            )
-        return self
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def type(self) -> ExtensionType:
+        return self.canonical_config.type
 
 
 class Binding(BaseModel):
@@ -80,21 +65,14 @@ class Conflict(BaseModel):
 
     @model_validator(mode="after")
     def _validate_resolution_consistency(self) -> "Conflict":
-        if (
-            self.resolution == ConflictResolution.SOURCE_CHOSEN
-            and self.resolved_binding_id is None
-        ):
-            raise ValueError(
-                "resolved_binding_id is required when resolution is source_chosen"
-            )
-        if (
-            self.resolution != ConflictResolution.SOURCE_CHOSEN
-            and self.resolved_binding_id is not None
-        ):
-            raise ValueError(
-                "resolved_binding_id must be unset unless resolution is source_chosen"
-            )
-        return self
+        is_source_chosen = self.resolution == ConflictResolution.SOURCE_CHOSEN
+        if is_source_chosen == bool(self.resolved_binding_id):
+            return self
+        raise ValueError(
+            "resolved_binding_id is required when resolution is source_chosen"
+            if is_source_chosen
+            else "resolved_binding_id must be unset unless resolution is source_chosen"
+        )
 
 
 class Project(BaseModel):
@@ -114,33 +92,41 @@ class Project(BaseModel):
         return value
 
 
-class PrecedenceLayer(BaseModel):
-    """One layer of a PrecedenceChain."""
+class _PrecedenceLayerBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
     scope: Scope
     file_path: str
     exists: bool
-    order_rank: int | None = None
-    status: LayerStatus
     origin: LayerOrigin
+
+
+class ConsultedLayer(_PrecedenceLayerBase):
+    """A layer an adapter has verified is consulted, ranked in precedence order."""
+
+    status: Literal[LayerStatus.CONSULTED] = LayerStatus.CONSULTED
+    order_rank: int
     resolves: bool
 
-    @model_validator(mode="after")
-    def _validate_status_rules(self) -> "PrecedenceLayer":
-        if self.status == LayerStatus.CONSULTED:
-            if self.order_rank is None:
-                raise ValueError("consulted layers must have an order_rank")
-        else:
-            if self.order_rank is not None:
-                raise ValueError(
-                    "only consulted layers may carry an order_rank "
-                    f"(status={self.status.value!r})"
-                )
-            if self.resolves:
-                raise ValueError(
-                    f"layers with status={self.status.value!r} must not resolve"
-                )
-        return self
+
+class NotConsultedLayer(_PrecedenceLayerBase):
+    """A layer an adapter has verified is not consulted."""
+
+    status: Literal[LayerStatus.NOT_CONSULTED] = LayerStatus.NOT_CONSULTED
+    resolves: Literal[False] = False
+
+
+class UnconfirmedLayer(_PrecedenceLayerBase):
+    """A layer whose consultation could not be confirmed; it never resolves."""
+
+    status: Literal[LayerStatus.UNCONFIRMED] = LayerStatus.UNCONFIRMED
+    resolves: Literal[False] = False
+
+
+PrecedenceLayer = Annotated[
+    ConsultedLayer | NotConsultedLayer | UnconfirmedLayer,
+    Field(discriminator="status"),
+]
 
 
 class PrecedenceChain(BaseModel):

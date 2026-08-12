@@ -16,10 +16,13 @@ from .enums import (
 from .models import (
     Binding,
     Conflict,
+    ConsultedLayer,
     Extension,
+    NotConsultedLayer,
     PrecedenceChain,
     PrecedenceLayer,
     Project,
+    UnconfirmedLayer,
 )
 
 __all__ = [
@@ -27,12 +30,14 @@ __all__ = [
     "CanonicalConfig",
     "Conflict",
     "ConflictResolution",
+    "ConsultedLayer",
     "Extension",
     "ExtensionType",
     "LayerOrigin",
     "LayerStatus",
     "McpServerConfig",
     "MemoryFileConfig",
+    "NotConsultedLayer",
     "PrecedenceChain",
     "PrecedenceLayer",
     "Project",
@@ -40,4 +45,5 @@ __all__ = [
     "SkillConfig",
     "Source",
     "SyncState",
+    "UnconfirmedLayer",
 ]

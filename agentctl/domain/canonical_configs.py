@@ -1,4 +1,8 @@
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .enums import ExtensionType
 
 
 class McpServerConfig(BaseModel):
@@ -6,6 +10,7 @@ class McpServerConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    type: Literal[ExtensionType.MCP_SERVER] = ExtensionType.MCP_SERVER
     command: str | None = None
     args: list[str] = []
     env: dict[str, str] = {}
@@ -24,6 +29,7 @@ class MemoryFileConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    type: Literal[ExtensionType.MEMORY_FILE] = ExtensionType.MEMORY_FILE
     content: str
     is_persistent_memory: bool = Field(
         description="True for agent-accumulated memory eg. MEMORY.MD"
@@ -35,9 +41,13 @@ class SkillConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    type: Literal[ExtensionType.SKILL] = ExtensionType.SKILL
     description: str
     body: str
     bundled_files: list[str] = []
 
 
-CanonicalConfig = McpServerConfig | MemoryFileConfig | SkillConfig
+CanonicalConfig = Annotated[
+    McpServerConfig | MemoryFileConfig | SkillConfig,
+    Field(discriminator="type"),
+]
