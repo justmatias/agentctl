@@ -1,5 +1,5 @@
 from agentctl.storage import SqliteExtensionRepository
-from tests.factories import ExtensionFactory
+from tests.polyfactory import ExtensionFactory
 
 
 def test_extension_create_and_get_round_trip(

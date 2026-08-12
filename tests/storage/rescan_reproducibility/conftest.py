@@ -10,7 +10,7 @@ from agentctl.storage import (
     SqliteConflictRepository,
     SqliteExtensionRepository,
 )
-from tests.factories import BindingFactory, ExtensionFactory
+from tests.polyfactory import BindingFactory, ExtensionFactory
 
 
 @pytest.fixture

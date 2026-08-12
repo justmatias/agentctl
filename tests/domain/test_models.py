@@ -19,7 +19,7 @@ from agentctl.domain import (
     UnconfirmedLayer,
 )
 from tests.domain.conftest import assert_round_trips
-from tests.factories import BindingFactory, ExtensionFactory
+from tests.polyfactory import BindingFactory, ExtensionFactory
 
 
 def test_extension_round_trips_through_json(

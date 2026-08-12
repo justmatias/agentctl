@@ -1,6 +1,6 @@
 from agentctl.domain import Binding, Extension
 from agentctl.storage import SqliteBindingRepository
-from tests.factories import BindingFactory
+from tests.polyfactory import BindingFactory
 
 
 def test_binding_create_and_get_round_trip(
