@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
   pull_request:
     types: [opened, synchronize, reopened, edited]
 
@@ -60,7 +60,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-python-env
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Run lint and format checks
         run: uv run poe format
@@ -77,7 +77,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-python-env
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Run unit tests
         run: uv run poe test
@@ -94,7 +94,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-python-env
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Run pip-audit
         run: uvx pip-audit --local
@@ -113,7 +113,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-python-env
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Autoupdate pre-commit hooks
         run: uv run pre-commit autoupdate
@@ -146,7 +146,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-python-env
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Get proposed version
         id: proposed
@@ -187,7 +187,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-python-env
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Bump version and update changelog
         id: release
@@ -199,30 +199,30 @@ jobs:
       released: ${{ steps.release.outputs.released }}
       version: ${{ steps.release.outputs.version }}
 
-  publish:
-    name: Publish to PyPI
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && needs.versioning.outputs.released == 'true'
-    needs: [versioning]
-    environment:
-      name: pypi
-      url: https://pypi.org/p/agentctl
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-          ref: main
-          fetch-depth: 0
+  # publish:
+  #   name: Publish to PyPI
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' && needs.versioning.outputs.released == 'true'
+  #   needs: [versioning]
+  #   environment:
+  #     name: pypi
+  #     url: https://pypi.org/p/agentctl
+  #   permissions:
+  #     id-token: write
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #       with:
+  #         token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+  #         ref: main
+  #         fetch-depth: 0
 
-      - name: Setup environment
-        uses: ./.github/actions/setup-python-env
-        with:
-          python-version: '3.13'
+  #     - name: Setup environment
+  #       uses: ./.github/actions/setup-python-env
+  #       with:
+  #         python-version: '3.13'
 
-      - name: Build distributions
-        run: uv build
+  #     - name: Build distributions
+  #       run: uv build
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+  #     - name: Publish to PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
