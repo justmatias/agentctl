@@ -2,8 +2,9 @@
 
 from fastapi import FastAPI
 
-from . import __version__
-from .injections import InjectionConfig, clear_injections, setup_injections
+from .. import __version__
+from ..injections import InjectionConfig, clear_injections, setup_injections
+from .routers import health_router
 
 
 def create_app(injection_config: InjectionConfig = InjectionConfig.PRODUCTION) -> FastAPI:
@@ -16,9 +17,6 @@ def create_app(injection_config: InjectionConfig = InjectionConfig.PRODUCTION) -
     setup_injections(injection_config)
 
     app = FastAPI(title="agentctl", version=__version__)
-
-    @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    app.include_router(health_router)
 
     return app

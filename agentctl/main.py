@@ -2,7 +2,7 @@ import uvicorn
 
 from agentctl.utils import logger
 
-from .app import create_app
+from .api import create_app
 
 
 def main() -> None:
