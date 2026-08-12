@@ -117,8 +117,10 @@ def earlier_project(create_saved_project: Callable[..., Project]) -> Project:
 
 @pytest.fixture
 def later_project(
-    create_saved_project: Callable[..., Project], earlier_project: Project
+    create_saved_project: Callable[..., Project],
+    earlier_project: Project,  # pylint: disable=unused-argument
 ) -> Project:
+    """Depends on `earlier_project` only to ensure it is created first."""
     return create_saved_project(path="/home/user/code/b", display_name="b")
 
 

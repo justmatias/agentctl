@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 from .database import Database
 from .migrations import MIGRATIONS, Migration, apply_migrations
 from .repositories import Repository

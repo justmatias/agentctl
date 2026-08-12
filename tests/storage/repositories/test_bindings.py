@@ -19,7 +19,7 @@ def test_binding_find_by_extension_filters(
     binding_repository: SqliteBindingRepository,
     saved_extension: Extension,
     saved_binding: Binding,
-    other_binding: Binding,
+    other_binding: Binding,  # pylint: disable=unused-argument
 ) -> None:
     result = binding_repository.find(extension_id=saved_extension.id)
 

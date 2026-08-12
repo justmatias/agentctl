@@ -45,7 +45,7 @@ def test_reopening_an_already_migrated_database_does_not_reapply(
     with Database(database_path) as database:
         count = database.connection.execute(
             text("SELECT COUNT(*) FROM schema_migrations")
-        ).fetchone()[0]
+        ).scalar()
         assert count == len(MIGRATIONS)
 
 

@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 from .bindings import SqliteBindingRepository
 from .conflicts import SqliteConflictRepository
 from .extensions import SqliteExtensionRepository

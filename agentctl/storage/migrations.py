@@ -65,5 +65,4 @@ def apply_migrations(
                 f"Migration {migration.version} failed and was rolled back: {exc}"
             )
             raise
-        else:
-            connection.commit()
+        connection.commit()
