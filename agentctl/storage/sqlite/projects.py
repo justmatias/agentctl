@@ -1,8 +1,8 @@
 from sqlalchemy import RowMapping, insert, update
 
 from agentctl.domain import Project
+from agentctl.storage.schema import projects
 
-from ..schema import projects
 from .repository import SqliteRepository
 
 

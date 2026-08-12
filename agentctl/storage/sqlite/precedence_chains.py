@@ -1,23 +1,19 @@
 from uuid import UUID, uuid4
 
-from sqlalchemy import Connection, RowMapping, delete, insert, select
+from sqlalchemy import RowMapping, delete, insert, select
 
 from agentctl.domain import PrecedenceChain, Source
+from agentctl.storage.schema import precedence_chains
 
-from ..schema import precedence_chains
-from ._transactions import write_in_transaction
+from .repository import SqliteConnectionRepository
 
 
-class SqlitePrecedenceChainRepository:
+class SqlitePrecedenceChainRepository(SqliteConnectionRepository):
     """Cache keyed by (source, project_id); never the source of truth (SPECS §9)."""
-
-    def __init__(self, connection: Connection) -> None:
-        self._connection = connection
 
     def upsert(self, chain: PrecedenceChain) -> None:
         project_id = str(chain.project_id) if chain.project_id else None
-        write_in_transaction(
-            self._connection,
+        self._write_in_transaction(
             [
                 delete(precedence_chains).where(
                     precedence_chains.c.source == chain.source.value,
@@ -57,8 +53,7 @@ class SqlitePrecedenceChainRepository:
         return [self._row_to_model(row) for row in rows]
 
     def delete(self, source: Source, project_id: UUID | None) -> None:
-        write_in_transaction(
-            self._connection,
+        self._write_in_transaction(
             [
                 delete(precedence_chains).where(
                     precedence_chains.c.source == source.value,

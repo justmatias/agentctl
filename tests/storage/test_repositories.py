@@ -60,7 +60,7 @@ def test_shared_create_rolls_back_and_leaves_connection_usable_on_failure(
     extension_repository: SqliteExtensionRepository, saved_extension: Extension
 ) -> None:
     # Inserting the same id twice violates the primary key, forcing
-    # `write_in_transaction`'s rollback path. The connection must still be
+    # `_write_in_transaction`'s rollback path. The connection must still be
     # usable afterward, and the original row must be untouched.
     with pytest.raises(IntegrityError):
         extension_repository.create(saved_extension)

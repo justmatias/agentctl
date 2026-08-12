@@ -36,9 +36,10 @@ def apply_migrations(
 
     Each migration commits as one unit (commit-as-you-go, since this
     connection stays open for the caller's lifetime — see
-    `sqlite/_transactions.py`), so a failure partway through rolls back
-    everything the migration already did — SQLite DDL is transactional —
-    rather than leaving earlier statements committed.
+    `SqliteConnectionRepository._write_in_transaction`), so a failure
+    partway through rolls back everything the migration already did —
+    SQLite DDL is transactional — rather than leaving earlier statements
+    committed.
     """
     schema_migrations.create(connection, checkfirst=True)
     connection.commit()

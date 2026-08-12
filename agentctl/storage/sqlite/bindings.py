@@ -3,8 +3,8 @@ from uuid import UUID
 from sqlalchemy import RowMapping, insert, select, update
 
 from agentctl.domain import Binding
+from agentctl.storage.schema import bindings
 
-from ..schema import bindings
 from .repository import SqliteRepository
 
 

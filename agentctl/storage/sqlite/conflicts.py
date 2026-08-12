@@ -1,8 +1,8 @@
 from sqlalchemy import RowMapping, insert, update
 
 from agentctl.domain import Conflict
+from agentctl.storage.schema import conflicts
 
-from ..schema import conflicts
 from .repository import SqliteRepository
 
 
