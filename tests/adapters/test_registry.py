@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from agentctl.adapters import AdapterCapabilities, AdapterRegistry
-from agentctl.adapters.testing import NullAdapter
+from agentctl.adapters import AdapterRegistry
+from agentctl.adapters.fake import NullAdapter
 from agentctl.domain import ExtensionType, Scope, Source
 
 
@@ -14,22 +14,13 @@ def test_register_rejects_an_adapter_that_does_not_implement_the_protocol() -> N
         registry.register(object())  # type: ignore[arg-type]
 
 
-class _MismatchedSourceAdapter(NullAdapter):
-    """A NullAdapter whose declared capabilities.source disagrees with adapter.source."""
-
-    @property
-    def capabilities(self) -> AdapterCapabilities:
-        return AdapterCapabilities(
-            source=Source.CURSOR, extension_types=frozenset(), scopes=frozenset()
-        )
-
-
-def test_register_rejects_mismatched_source_and_capabilities_source() -> None:
+def test_register_rejects_mismatched_source_and_capabilities_source(
+    mismatched_source_adapter: NullAdapter,
+) -> None:
     registry = AdapterRegistry()
-    adapter = _MismatchedSourceAdapter(Source.CLAUDE_CODE)
 
     with pytest.raises(ValueError, match="does not match"):
-        registry.register(adapter)
+        registry.register(mismatched_source_adapter)
 
 
 def test_get_returns_none_when_nothing_registered() -> None:
