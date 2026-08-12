@@ -12,23 +12,6 @@ from agentctl.storage import (
     SqlitePrecedenceChainRepository,
     SqliteProjectRepository,
 )
-from tests.factories import (
-    create_consulted_layer,
-    create_saved_binding,
-    create_saved_conflict,
-    create_saved_extension,
-    create_saved_precedence_chain,
-    create_saved_project,
-)
-
-__all__ = [
-    "create_consulted_layer",
-    "create_saved_binding",
-    "create_saved_conflict",
-    "create_saved_extension",
-    "create_saved_precedence_chain",
-    "create_saved_project",
-]
 
 
 @pytest.fixture
