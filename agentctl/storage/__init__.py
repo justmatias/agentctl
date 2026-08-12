@@ -1,6 +1,14 @@
 from .database import Database
 from .migrations import MIGRATIONS, Migration, apply_migrations
-from .repositories import BindingRepository, PrecedenceChainStore, Repository
+from .repositories import Repository
+from .schema import (
+    BindingRow,
+    ConflictRow,
+    ExtensionRow,
+    PrecedenceChainRow,
+    ProjectRow,
+    SchemaMigrationRow,
+)
 from .sqlite import (
     SqliteBindingRepository,
     SqliteConflictRepository,
@@ -11,11 +19,15 @@ from .sqlite import (
 
 __all__ = [
     "MIGRATIONS",
-    "BindingRepository",
+    "BindingRow",
+    "ConflictRow",
     "Database",
+    "ExtensionRow",
     "Migration",
-    "PrecedenceChainStore",
+    "PrecedenceChainRow",
+    "ProjectRow",
     "Repository",
+    "SchemaMigrationRow",
     "SqliteBindingRepository",
     "SqliteConflictRepository",
     "SqliteExtensionRepository",

@@ -66,3 +66,27 @@ def test_shared_create_rolls_back_and_leaves_connection_usable_on_failure(
         extension_repository.create(saved_extension)
 
     assert extension_repository.get(saved_extension.id) == saved_extension
+
+
+def test_shared_find_rejects_unknown_filter_column(
+    extension_repository: SqliteExtensionRepository,
+) -> None:
+    with pytest.raises(KeyError):
+        extension_repository.find(**{"id; DROP TABLE extensions; --": "x"})
+
+
+def test_shared_find_one_returns_none_on_no_match(
+    extension_repository: SqliteExtensionRepository,
+) -> None:
+    assert extension_repository.find_one(name="no such extension") is None
+
+
+def test_shared_update_of_missing_id_is_a_no_op(
+    extension_repository: SqliteExtensionRepository, saved_extension: Extension
+) -> None:
+    missing = saved_extension.model_copy(update={"id": uuid4()})
+
+    extension_repository.update(missing)
+
+    assert extension_repository.get(missing.id) is None
+    assert extension_repository.get(saved_extension.id) == saved_extension

@@ -47,29 +47,29 @@ def database_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def extension_repository(database: Database) -> SqliteExtensionRepository:
-    return SqliteExtensionRepository(database.connection)
+    return SqliteExtensionRepository(database.session)
 
 
 @pytest.fixture
 def binding_repository(database: Database) -> SqliteBindingRepository:
-    return SqliteBindingRepository(database.connection)
+    return SqliteBindingRepository(database.session)
 
 
 @pytest.fixture
 def conflict_repository(database: Database) -> SqliteConflictRepository:
-    return SqliteConflictRepository(database.connection)
+    return SqliteConflictRepository(database.session)
 
 
 @pytest.fixture
 def project_repository(database: Database) -> SqliteProjectRepository:
-    return SqliteProjectRepository(database.connection)
+    return SqliteProjectRepository(database.session)
 
 
 @pytest.fixture
 def precedence_chain_repository(
     database: Database,
 ) -> SqlitePrecedenceChainRepository:
-    return SqlitePrecedenceChainRepository(database.connection)
+    return SqlitePrecedenceChainRepository(database.session)
 
 
 @pytest.fixture

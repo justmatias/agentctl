@@ -29,7 +29,7 @@ def seed_database(database_path: Path) -> Generator[Database]:
 def discovered_extension(
     seed_database: Database, extension_factory: ExtensionFactory
 ) -> Extension:
-    extension_repository = SqliteExtensionRepository(seed_database.connection)
+    extension_repository = SqliteExtensionRepository(seed_database.session)
     extension = extension_factory.build(name="github")
     extension_repository.create(extension)
     return extension
@@ -41,7 +41,7 @@ def discovered_binding(
     binding_factory: BindingFactory,
     discovered_extension: Extension,
 ) -> Binding:
-    binding_repository = SqliteBindingRepository(seed_database.connection)
+    binding_repository = SqliteBindingRepository(seed_database.session)
     binding = binding_factory.build(extension_id=discovered_extension.id)
     binding_repository.create(binding)
     return binding
@@ -51,7 +51,7 @@ def discovered_binding(
 def unbound_extension(
     seed_database: Database, extension_factory: ExtensionFactory
 ) -> Extension:
-    extension_repository = SqliteExtensionRepository(seed_database.connection)
+    extension_repository = SqliteExtensionRepository(seed_database.session)
     extension = extension_factory.build(name="orphaned")
     extension_repository.create(extension)
     return extension
@@ -63,7 +63,7 @@ def intentionally_kept_conflict(
     discovered_extension: Extension,
     discovered_binding: Binding,
 ) -> Conflict:
-    conflict_repository = SqliteConflictRepository(seed_database.connection)
+    conflict_repository = SqliteConflictRepository(seed_database.session)
     conflict = Conflict(
         extension_id=discovered_extension.id,
         binding_ids=[discovered_binding.id],

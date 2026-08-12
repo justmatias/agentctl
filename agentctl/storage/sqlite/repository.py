@@ -1,92 +1,155 @@
-from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import ClassVar
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Any, ClassVar, cast
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import Connection, RowMapping, Table, delete, select
+from sqlalchemy import Column, ColumnElement, delete, insert, update
 from sqlalchemy.sql import Executable
+from sqlmodel import Session, SQLModel, select
 
 from agentctl.utils import logger
 
 
-class SqliteConnectionRepository:
-    """Base for sqlite repositories sharing one long-lived connection.
+def _encode(value: object) -> object:
+    if isinstance(value, UUID | Path):
+        return str(value)
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
 
-    Holds the connection and the transactional-write helper, so that
-    `SqliteRepository` and `SqlitePrecedenceChainRepository` — which don't
-    share a CRUD contract (single `id` column vs. composite source/project
-    key) and so can't inherit from one another — both get it without
-    duplicating it.
+
+class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
+    """Generic CRUD over a single SQLModel row type.
+
+    Keyed by `_natural_key` (a single `id` column by default; a composite
+    key such as `(source, project_id)` for `PrecedenceChain`, which has no
+    `id` of its own).
     """
 
-    def __init__(self, connection: Connection) -> None:
-        self._connection = connection
+    _domain_model: type[DomainT]
+    _row_model: type[RowT]
+    _natural_key: ClassVar[tuple[str, ...]] = ("id",)
+    _default_order_by: ClassVar[str | None] = None
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    @property
+    def _entity_name(self) -> str:
+        return self._domain_model.__name__.lower()
+
+    def create(self, item: DomainT) -> None:
+        self._write_in_transaction(
+            [insert(self._row_model).values(**self._row_data(item))],
+            message=f"Created {self._entity_name} {self._identity(item)}",
+        )
+
+    def get(self, item_id: UUID) -> DomainT | None:
+        return self.find_one(id=item_id)
+
+    def find(self, **filters: object) -> list[DomainT]:
+        query = select(self._row_model)
+        for name, value in filters.items():
+            query = query.where(self._filter_clause(name, value))
+        return [self._to_domain(row) for row in self._session.exec(query).all()]
+
+    def find_one(self, **filters: object) -> DomainT | None:
+        results = self.find(**filters)
+        return results[0] if results else None
+
+    def list(self, *, order_by: str | None = None) -> list[DomainT]:
+        query = select(self._row_model)
+        column_name = order_by or self._default_order_by
+        if column_name:
+            query = query.order_by(self._column(column_name))
+        return [self._to_domain(row) for row in self._session.exec(query).all()]
+
+    def update(self, item: DomainT) -> None:
+        statement = update(self._row_model)
+        for key in self._natural_key:
+            statement = statement.where(
+                self._column(key) == _encode(getattr(item, key))
+            )
+        self._write_in_transaction(
+            [statement.values(**self._row_data(item))],
+            message=f"Updated {self._entity_name} {self._identity(item)}",
+        )
+
+    def upsert(self, item: DomainT) -> None:
+        self._write_in_transaction(
+            [
+                self._natural_key_delete(item),
+                insert(self._row_model).values(**self._row_data(item)),
+            ],
+            message=f"Upserted {self._entity_name} {self._identity(item)}",
+        )
+
+    def delete(self, item_id: UUID) -> None:
+        self.delete_where(id=item_id)
+
+    def delete_where(self, **filters: object) -> None:
+        statement = delete(self._row_model)
+        for name, value in filters.items():
+            statement = statement.where(self._filter_clause(name, value))
+        self._write_in_transaction(
+            [statement],
+            message=f"Deleted {self._entity_name} ({filters})",
+        )
+
+    def _natural_key_delete(self, item: DomainT) -> Executable:
+        statement = delete(self._row_model)
+        for key in self._natural_key:
+            statement = statement.where(
+                self._column(key) == _encode(getattr(item, key))
+            )
+        return statement
+
+    def _identity(self, item: DomainT) -> str:
+        values = [str(getattr(item, key)) for key in self._natural_key]
+        if len(values) == 1:
+            return values[0]
+        pairs = zip(self._natural_key, values, strict=True)
+        return ", ".join(f"{key}={value}" for key, value in pairs)
+
+    def _row_data(self, item: DomainT) -> dict[str, object]:
+        return self._row_model(**item.model_dump(mode="json")).model_dump()
+
+    def _to_domain(self, row: RowT) -> DomainT:
+        return self._domain_model.model_validate(row.model_dump())
+
+    def _column(self, name: str) -> Column[Any]:
+        # `self._row_model.__table__.c[name]` raises KeyError for anything
+        # that isn't a real column name, so a caller-supplied value (via
+        # `order_by` or any filter kwarg) can't be used to inject arbitrary
+        # SQL the way string interpolation could.
+        table = self._row_model.__table__  # type: ignore[attr-defined]
+        return cast(Column[Any], table.c[name])
+
+    def _filter_clause(self, name: str, value: object) -> ColumnElement[bool]:
+        column = self._column(name)
+        encoded = _encode(value)
+        return column.is_(None) if encoded is None else column == encoded
 
     def _write_in_transaction(
         self, statements: Sequence[Executable], *, message: str
     ) -> None:
         """Run `statements` as one atomic transaction, then log `message`.
 
-        Uses commit-as-you-go rather than `connection.begin()`: this
-        connection is held open for the repository's whole lifetime, so a
-        prior read may have already autobegun a transaction, and `begin()`
-        raises if called against one already in progress.
+        Uses commit-as-you-go rather than `session.begin()`: this session is
+        held open for the repository's whole lifetime, so a prior read may
+        have already autobegun a transaction, and `begin()` raises if called
+        against one already in progress.
         """
         try:
             for statement in statements:
-                self._connection.execute(statement)
+                self._session.execute(statement)
         except Exception:
-            self._connection.rollback()
+            self._session.rollback()
             raise
-        self._connection.commit()
+        self._session.commit()
         logger.info(message)
-
-
-class SqliteRepository[T: BaseModel](SqliteConnectionRepository, ABC):
-    """Shared CRUD for repositories keyed by a single `id` column."""
-
-    _table: ClassVar[Table]
-    _entity_name: ClassVar[str]
-
-    def get(self, item_id: UUID) -> T | None:
-        row = (
-            self._connection
-            .execute(select(self._table).where(self._table.c.id == str(item_id)))
-            .mappings()
-            .fetchone()
-        )
-        return self._row_to_model(row) if row else None
-
-    def list(self, *, order_by: str | None = None) -> list[T]:
-        # `self._table.c[order_by]` raises KeyError for anything that isn't
-        # an actual column name, so a caller-supplied value can't be used to
-        # inject arbitrary SQL the way string interpolation could.
-        query = select(self._table)
-        if order_by:
-            query = query.order_by(self._table.c[order_by])
-        rows = self._connection.execute(query).mappings().fetchall()
-        return [self._row_to_model(row) for row in rows]
-
-    def delete(self, item_id: UUID) -> None:
-        self._write_in_transaction(
-            [delete(self._table).where(self._table.c.id == str(item_id))],
-            message=f"Deleted {self._entity_name} {item_id}",
-        )
-
-    def _write(
-        self,
-        statement: Executable,
-        *,
-        action: str,
-        item_id: object,
-        extra: str = "",
-    ) -> None:
-        self._write_in_transaction(
-            [statement],
-            message=f"{action} {self._entity_name} {item_id}{extra}",
-        )
-
-    @staticmethod
-    @abstractmethod
-    def _row_to_model(row: RowMapping) -> T: ...

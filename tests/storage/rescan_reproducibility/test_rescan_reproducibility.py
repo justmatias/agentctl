@@ -31,9 +31,9 @@ def test_deleting_database_then_rescanning_only_loses_database_only_state(
     database_path.unlink()
 
     rescanned = Database(database_path)
-    rescanned_extensions = SqliteExtensionRepository(rescanned.connection)
-    rescanned_bindings = SqliteBindingRepository(rescanned.connection)
-    rescanned_conflicts = SqliteConflictRepository(rescanned.connection)
+    rescanned_extensions = SqliteExtensionRepository(rescanned.session)
+    rescanned_bindings = SqliteBindingRepository(rescanned.session)
+    rescanned_conflicts = SqliteConflictRepository(rescanned.session)
 
     rescanned_extensions.create(discovered_extension)
     rescanned_bindings.create(discovered_binding)

@@ -1,12 +1,13 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, insert, select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import SQLModel, col
 
 from agentctl.utils import logger
 
-from .schema import metadata, schema_migrations
+from .schema import SchemaMigrationRow
 
 
 @dataclass(frozen=True)
@@ -17,7 +18,7 @@ class Migration:
 
 
 def _create_initial_schema(connection: Connection) -> None:
-    metadata.create_all(connection, checkfirst=True)
+    SQLModel.metadata.create_all(connection, checkfirst=True)
 
 
 MIGRATIONS: tuple[Migration, ...] = (
@@ -36,15 +37,16 @@ def apply_migrations(
 
     Each migration commits as one unit (commit-as-you-go, since this
     connection stays open for the caller's lifetime — see
-    `SqliteConnectionRepository._write_in_transaction`), so a failure
-    partway through rolls back everything the migration already did —
-    SQLite DDL is transactional — rather than leaving earlier statements
-    committed.
+    `SqliteRepository._write_in_transaction`), so a failure partway through
+    rolls back everything the migration already did — SQLite DDL is
+    transactional — rather than leaving earlier statements committed.
     """
-    schema_migrations.create(connection, checkfirst=True)
+    schema_migrations_table = SchemaMigrationRow.__table__  # type: ignore[attr-defined]
+    schema_migrations_table.create(connection, checkfirst=True)
     connection.commit()
     applied = {
-        row.version for row in connection.execute(select(schema_migrations.c.version))
+        row.version
+        for row in connection.execute(select(col(SchemaMigrationRow.version)))
     }
     for migration in sorted(migrations, key=lambda m: m.version):
         if migration.version in applied:
@@ -53,7 +55,7 @@ def apply_migrations(
         try:
             migration.apply(connection)
             connection.execute(
-                schema_migrations.insert().values(
+                insert(SchemaMigrationRow).values(
                     version=migration.version, description=migration.description
                 )
             )

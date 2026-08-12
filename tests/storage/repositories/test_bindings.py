@@ -15,13 +15,13 @@ def test_binding_create_and_get_round_trip(
     assert binding_repository.get(binding.id) == binding
 
 
-def test_binding_list_for_extension_filters(
+def test_binding_find_by_extension_filters(
     binding_repository: SqliteBindingRepository,
     saved_extension: Extension,
     saved_binding: Binding,
     other_binding: Binding,
 ) -> None:
-    result = binding_repository.list_for_extension(saved_extension.id)
+    result = binding_repository.find(extension_id=saved_extension.id)
 
     assert [binding.id for binding in result] == [saved_binding.id]
 

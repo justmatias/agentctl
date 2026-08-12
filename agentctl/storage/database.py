@@ -3,6 +3,7 @@ from types import TracebackType
 from typing import Self
 
 from sqlalchemy import Connection, Engine, create_engine, event
+from sqlmodel import Session
 
 from .migrations import apply_migrations
 
@@ -40,12 +41,25 @@ class Database:
         self._engine: Engine = create_sqlite_engine(path)
         self._connection: Connection = self._engine.connect()
         apply_migrations(self._connection)
+        # `control_fully` is load-bearing: without it, a read issued through
+        # `self._connection` autobegins a transaction the Session would then
+        # refuse to commit, and repository writes would silently not persist.
+        self._session = Session(
+            bind=self._connection,
+            expire_on_commit=False,
+            join_transaction_mode="control_fully",
+        )
 
     @property
     def connection(self) -> Connection:
         return self._connection
 
+    @property
+    def session(self) -> Session:
+        return self._session
+
     def close(self) -> None:
+        self._session.close()
         self._connection.close()
         self._engine.dispose()
 
