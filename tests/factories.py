@@ -6,7 +6,7 @@ from polyfactory.pytest_plugin import register_fixture
 from agentctl.domain import Binding, Extension, McpServerConfig
 
 
-@register_fixture
+@register_fixture(name="extension_factory")
 class ExtensionFactory(ModelFactory[Extension]):
     __model__ = Extension
 
@@ -15,6 +15,6 @@ class ExtensionFactory(ModelFactory[Extension]):
         return McpServerConfig(command="npx", args=["-y", "github-mcp"])
 
 
-@register_fixture
+@register_fixture(name="binding_factory")
 class BindingFactory(ModelFactory[Binding]):
     __model__ = Binding

@@ -1,5 +1,3 @@
-from typing import cast
-
 import pytest
 from pydantic import ValidationError
 
@@ -22,19 +20,6 @@ from agentctl.domain import (
 )
 from tests.domain.conftest import assert_round_trips
 from tests.factories import BindingFactory, ExtensionFactory
-
-
-@pytest.fixture(
-    params=[
-        McpServerConfig(command="npx", args=["-y", "github-mcp"]),
-        MemoryFileConfig(content="# Notes", is_persistent_memory=True),
-        SkillConfig(description="Does a thing", body="# Skill"),
-    ]
-)
-def canonical_config(
-    request: pytest.FixtureRequest,
-) -> McpServerConfig | MemoryFileConfig | SkillConfig:
-    return cast(McpServerConfig | MemoryFileConfig | SkillConfig, request.param)
 
 
 def test_extension_round_trips_through_json(

@@ -1,6 +1,6 @@
 import os
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 from dotenv import dotenv_values, load_dotenv
 from polyfactory.factories.pydantic_factory import ModelFactory
@@ -34,10 +34,10 @@ def get_settings() -> AppSettings:
     def load_test_settings() -> AppSettings:
         logger.info("Loading test settings...")
         environments = dotenv_values(".env").items()
-        overrides = {key: value for key, value in environments if value}
+        overrides: dict[str, Any] = {key: value for key, value in environments if value}
         logger.debug(f"Overriding factory values from .env: {list(overrides.keys())}")
 
-        return AppSettingsFactory.build(**overrides)  # type: ignore[no-any-return]
+        return AppSettingsFactory.build(**overrides)
 
     def load_production_settings() -> AppSettings:  # pragma: no cover
         logger.info("Loading production settings...")
