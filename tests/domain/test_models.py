@@ -168,7 +168,7 @@ class TestPrecedenceChain:
     @staticmethod
     def test_unconfirmed_layer_does_not_change_winner() -> None:
         """A fixture whose top layer is unconfirmed resolves to the same
-        winner as one where that layer is absent (SPECS §7.10, ROADMAP PR 1.5)."""
+        winner as one where that layer is absent"""
         confirmed_layer = PrecedenceLayer(
             scope=Scope.USER,
             file_path="~/.claude/settings.json",

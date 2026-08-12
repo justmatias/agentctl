@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Self
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -39,17 +40,14 @@ class Extension(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="after")
-    def _validate_canonical_config_matches_type(self) -> "Extension":
+    def _validate_canonical_config_matches_type(self) -> Self:
         expected = CANONICAL_CONFIG_TYPES.get(self.type)
-        if expected is None:
-            # ValueError (not KeyError) is required: pydantic only wraps
-            # ValueError/AssertionError from validators into ValidationError.
+        if not expected:
             raise ValueError(
                 f"no canonical config type registered for {self.type.value!r}"
             )
+
         if not isinstance(self.canonical_config, expected):
-            # ValueError (not TypeError) is required: pydantic only wraps
-            # ValueError/AssertionError from validators into ValidationError.
             raise ValueError(  # noqa: TRY004
                 f"canonical_config must be {expected.__name__} for type "
                 f"{self.type.value!r}, got {type(self.canonical_config).__name__}"
@@ -72,7 +70,7 @@ class Binding(BaseModel):
 
 
 class Conflict(BaseModel):
-    """Structured config only (SPECS §7.2): the same extension defined differently."""
+    """Structured config only: the same extension defined differently."""
 
     id: UUID = Field(default_factory=uuid4)
     extension_id: UUID
@@ -100,7 +98,7 @@ class Conflict(BaseModel):
 
 
 class Project(BaseModel):
-    """A directory the user has explicitly registered with the tool (SPECS §7.9)."""
+    """A directory the user has explicitly registered with the tool."""
 
     id: UUID = Field(default_factory=uuid4)
     path: Path
@@ -117,7 +115,7 @@ class Project(BaseModel):
 
 
 class PrecedenceLayer(BaseModel):
-    """One layer of a PrecedenceChain (SPECS §7.10)."""
+    """One layer of a PrecedenceChain."""
 
     scope: Scope
     file_path: str
