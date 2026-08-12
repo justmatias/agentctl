@@ -1,6 +1,66 @@
 # CHANGELOG
 
 
+## v3.1.0 (2026-08-12)
+
+### Features
+
+- **adapters**: Add source adapter protocol and registry
+  ([#11](https://github.com/justmatias/agentctl/pull/11),
+  [`2a8b198`](https://github.com/justmatias/agentctl/commit/2a8b198ecc6cbf77fdce75f1c114909c36de4750))
+
+* feat(adapters): add source adapter protocol and registry
+
+SourceAdapter protocol capturing the six adapter responsibilities from SPECS.md §9: locate global
+  config, locate project config, parse to canonical shape, serialize back to native format, report
+  an ordered precedence chain, and declare capabilities. Walk-up behavior and merge semantics (§7.9)
+  are exposed per extension type via a dedicated method rather than hardcoded, since different
+  extension types within the same harness can walk up differently. AdapterCapabilities declares
+  extension types, scopes, and workflow target forms (the last unused until Phase 2 but declared now
+  per the adapter-driven capability matrix in §7.12.2).
+
+AdapterRegistry provides register/get/list/unregister so adding a harness never touches core logic.
+  NullAdapter (agentctl/adapters/testing.py) is a protocol-conformant no-op adapter for exercising
+  the registry and contract end-to-end without any real harness.
+
+ROADMAP.md PR 0.4.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+* fix(adapters): address automated review feedback
+
+- AdapterRegistry.register() now checks isinstance(adapter, SourceAdapter) and raises TypeError for
+  malformed adapters, instead of accepting anything and failing later with a confusing
+  AttributeError. - register() now validates adapter.source == adapter.capabilities.source, so a
+  future adapter can't register with the two out of sync. - register()/unregister() now log: info on
+  a fresh registration or an unregister, warning when silently replacing an already-registered
+  adapter for the same Source. - NullAdapter's unused-argument static methods use
+  underscore-prefixed parameter names instead of a `del arg; return ...` shape.
+
+* fix(adapters): align with main conventions after rebase
+
+Rebasing onto main (domain/storage/writes now squash-merged as #8/#9/#10) surfaces conventions the
+  original commits predate:
+
+- Drop module docstrings from adapters/* to match every other module. -
+  tests.factories.make_extension no longer exists on main (factories.py now only builds DB-saved
+  records); switch to the extension_factory polyfactory fixture used everywhere else for in-memory
+  instances. - Flatten TestXxx test classes into module-level test functions, matching the
+  no-test-classes convention now applied throughout tests/. - Cover AdapterRegistry.register()'s two
+  error branches (non-conforming adapter, source/capabilities.source mismatch) to restore 100%
+  coverage on the new code.
+
+* fix(adapters): follow conftest fixture conventions in adapter tests
+
+Move MismatchedSourceAdapter out of test_registry.py into conftest.py (dropping its leading
+  underscore) behind a fixture, add a shared null_adapter fixture, and collapse test_protocol.py's
+  tautological no-op-method assertions into a single smoke test.
+
+---------
+
+Co-authored-by: Claude Sonnet 5 <noreply@anthropic.com>
+
+
 ## v3.0.0 (2026-08-12)
 
 ### Features
