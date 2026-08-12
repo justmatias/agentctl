@@ -1,11 +1,3 @@
-"""Key-scoped merge helper: touch only tool-owned keys in a shared JSON file.
-
-SPECS.md §7.3: writes must never clobber unrelated settings in a shared
-file like `settings.json`. `dict` preserves insertion order, so merging
-into the parsed object (rather than rebuilding it) keeps every untouched
-key's value, position, and presence exactly as found.
-"""
-
 import json
 from pathlib import Path
 from typing import Any

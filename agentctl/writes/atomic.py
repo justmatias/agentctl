@@ -1,5 +1,3 @@
-"""Atomic write primitive: temp file + os.replace (SPECS.md §7.3, §11)."""
-
 import os
 import stat
 import tempfile

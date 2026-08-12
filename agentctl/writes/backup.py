@@ -1,5 +1,3 @@
-"""Timestamped backups with a session-scoped rollback index (SPECS.md §7.11, §11)."""
-
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
