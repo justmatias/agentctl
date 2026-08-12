@@ -1,6 +1,245 @@
 # CHANGELOG
 
 
+## v3.0.0 (2026-08-12)
+
+### Features
+
+- Breaking change detected [skip ci]
+  ([`a130c5a`](https://github.com/justmatias/agentctl/commit/a130c5a3e74dbdae45c1b185ddfd3ec6066adda3))
+
+- **storage**: Add SQLite storage layer for orchestration metadata
+  ([#9](https://github.com/justmatias/agentctl/pull/9),
+  [`caab714`](https://github.com/justmatias/agentctl/commit/caab71495a6dd7c4cc1e0784fa4d686a5767ae78))
+
+* feat(storage): add SQLite storage layer for orchestration metadata
+
+Embedded DB with a linear versioned-DDL migration runner, repository Protocols the core service will
+  depend on (so storage stays swappable and mockable), and SQLite-backed implementations for every
+  Phase-0 model (Extension, Binding, Conflict, Project, PrecedenceChain).
+
+Per SPECS.md §9, the DB holds orchestration metadata only — harness files stay authoritative and the
+  DB is disposable, rebuildable by rescan. Since no adapter exists yet to perform a real scan (Phase
+  1), that guarantee is exercised here by simulating rescan: re-inserting exactly what discovery of
+  the same on-disk state would find after the DB file is deleted, and asserting only DB-only state
+  (user decisions, unbound canonical records) fails to come back.
+
+ROADMAP.md PR 0.2.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+* fix(storage): address automated review feedback
+
+- Add a partial unique index on precedence_chains(source) WHERE project_id IS NULL, since SQLite's
+  UNIQUE(source, project_id) treats NULL != NULL and previously allowed unlimited duplicate global
+  chains. - Make SqlitePrecedenceChainRepository.upsert atomic: delete+insert now run inside a
+  single `with self._connection:` transaction instead of composing two independently-committing
+  methods, so a crash between them can no longer lose the row. - apply_migrations now wraps DDL
+  application in try/except, rolling back and logging a clear "migration N failed" error instead of
+  silently leaving schema_migrations unrecorded; CREATE TABLE statements are now idempotent (IF NOT
+  EXISTS) so a retried migration doesn't hit "table already exists". - Add indexes on
+  bindings.extension_id and conflicts.extension_id to avoid full table scans on FK lookups. -
+  Replace every repository's hand-written commit() calls with `with self._connection:` transaction
+  blocks, and add logging on create/update/delete/upsert/migration-apply for observability into
+  storage mutations.
+
+* fix(storage): address human review feedback on PR #9
+
+- Remove module docstrings across the storage module (per review). - Add a generic
+  SqliteRepository[ModelT] base class for the four id-keyed repositories
+  (Extension/Binding/Conflict/Project), collapsing the duplicated commit+log wrapping in
+  create/update/delete into one place. SqlitePrecedenceChainRepository stays separate: it's keyed by
+  (source, project_id) and has upsert instead of create/update. - Fix a 3-level import in
+  tests/storage/test_repositories.py to import from agentctl.storage instead of the submodule
+  directly. - Simplify test_repositories.py: get/list/delete/update-mechanics are now tested once
+  against the shared base (via SqliteExtensionRepository) instead of duplicated per repository; each
+  repository test class keeps only its own create/update SQL round-trip plus whatever is unique to
+  it. - Adapt to the upstream domain-model rebase: PrecedenceLayer is now a discriminated union
+  (build ConsultedLayer directly) and tests/factories.py moved from make_extension()/make_binding()
+  helpers to polyfactory fixtures (extension_factory/binding_factory).
+
+Kept raw sqlite3 + the hand-rolled linear-migration runner as-is (no SQLAlchemy/Alembic) and
+  migrations.py as a single file — the schema is small and the project has no other heavy
+  dependencies yet.
+
+* fix(storage): address second round of human review feedback on PR #9
+
+- Remove the Database class docstring and shorten the "Phase-0" migration description to drop the
+  phase reference. - Extract the schema_migrations SELECT into a named variable instead of inlining
+  connection.execute() in the set comprehension. - Rename the SqliteRepository generic type var from
+  ModelT to T and trim its docstring to one line. - Add a generic Repository[T] Protocol in
+  repositories.py with the shared create/get/list/update/delete shape; Extension/Binding/
+  Conflict/Project repositories now extend it instead of repeating the same five method signatures.
+  PrecedenceChainRepository stays separate (keyed by source+project_id, not id). - Convert
+  tests/storage/test_repositories.py and test_rescan_reproducibility.py from Test* classes with
+  @staticmethod tests to plain module-level test_ functions, matching the rest of the test suite.
+
+Replied inline on the three open design questions (order_by as a parameter, generic model_validate
+  in _row_to_model, a service layer on top of the repositories) explaining why the current shape is
+  kept for now.
+
+* fix(storage): split sqlite_repositories.py into modules, rework storage test fixtures
+
+- Split agentctl/storage/sqlite_repositories.py into a package with one module per concrete
+  repository (base/extensions/bindings/conflicts/ projects/precedence_chains), re-exported unchanged
+  from agentctl/storage/__init__.py, per reviewer follow-up on the service-layer thread. - Move
+  repository instantiation and reusable entity setup out of the storage test bodies and into
+  tests/storage/conftest.py fixtures: extension_repository/binding_repository/conflict_repository/
+  project_repository/precedence_chain_repository, plus create_saved_extension/saved_extension,
+  create_saved_binding/ saved_binding, create_saved_project, and create_consulted_layer.
+  database_path is now a shared fixture too (used by test_migrations.py and
+  test_rescan_reproducibility.py). - Convert test_rescan_reproducibility.py's _seed() helper into a
+  proper discovered_inventory fixture instead of a plain function taking an open Database. - Convert
+  tests/storage/test_migrations.py from a Test* class with @staticmethod tests to plain module-level
+  test_ functions, matching the rest of the suite; use Database's context manager instead of manual
+  try/finally close. - Rename the "repo"/"db" abbreviations used throughout the storage tests to
+  "repository"/"database" for readability.
+
+* fix(storage): split repository tests per module, isolate rescan seeding
+
+- Move each repository's tests out of tests/storage/test_repositories.py into
+  tests/storage/repositories/test_extensions.py, test_bindings.py, test_conflicts.py,
+  test_projects.py, test_precedence_chains.py, matching the sqlite_repositories package split.
+  test_repositories.py now only holds the shared SqliteRepository base's get/list/update/delete
+  tests. - Replace test_rescan_reproducibility.py's monolithic _seed() with isolated per-entity
+  fixtures (discovered_extension, discovered_binding, unbound_extension,
+  intentionally_kept_conflict) backed by a seed_database fixture the test can close mid-test before
+  deleting and reopening the file. - Use `# noqa: F401` instead of `__all__` for the re-exports in
+  sqlite_repositories/__init__.py: an __all__ list here duplicated the same 5 names already listed
+  in storage/__init__.py's __all__ closely enough to trip pylint's duplicate-code check, and the
+  alternative (`import X as X`) trips its useless-import-alias check instead.
+
+* fix(storage): address latest round of PR #9 review feedback
+
+Renames sqlite_repositories/ to sqlite/ and base.py to repository.py, adds the missing __all__,
+  drops the _list_order_by class attribute in favor of each repository's list() hardcoding its
+  order_by when calling the shared base, simplifies _row_to_model across repositories to spread
+  dict(row) instead of listing every column, and shortens the precedence chain repository's
+  docstring. Test-side, replaces raw factory-callable parameters with named per-instance fixtures
+  wherever a test only needed a fixed, enumerable set of created entities.
+
+* refactor(storage): trim repository protocols to their real shapes
+
+Drop the empty nominal subclasses (ExtensionRepository, ConflictRepository, ProjectRepository) that
+  added nothing over Repository[T] — Protocols are structural and need no inheritance to be
+  satisfied. Split PrecedenceChain's protocol into its own module as PrecedenceChainStore since its
+  key shape and upsert semantics genuinely differ from the CRUD Repository family.
+
+* refactor(storage): replace raw SQL with SQLAlchemy Core
+
+Adopts SQLAlchemy Core as a thin layer over the sqlite storage module, fixing the correctness bugs
+  the raw-SQL approach carried:
+
+- Migrations run as one real transaction per migration (via the pysqlite transactional-DDL recipe),
+  so a failure partway through no longer leaves earlier CREATE TABLE statements committed. -
+  list()'s order_by is resolved against the table's actual columns instead of being interpolated
+  into SQL, closing off injection. - extensions.id is now a real ON DELETE CASCADE foreign key for
+  bindings/conflicts, instead of an uncaught IntegrityError on delete. - JSON columns
+  (canonical_config, binding_ids, detected_sources, layers) serialize automatically, removing the
+  hand-written json.dumps/loads and column-list duplication across repositories. - A shared
+  write_in_transaction() helper replaces the duplicated transaction+logging pattern between
+  SqliteRepository and SqlitePrecedenceChainRepository.
+
+Also merges the standalone PrecedenceChainStore protocol module back into repositories.py, adds a
+  ConflictFactory/precedence-chain fixture following the existing polyfactory conventions, and
+  splits the rescan-reproducibility test's fixtures into their own conftest.py.
+
+* refactor(storage): fold transaction-write helper into a shared base class
+
+`write_in_transaction` lived in its own module only because SqliteRepository and
+  SqlitePrecedenceChainRepository both needed it despite not sharing a CRUD contract. Extract
+  SqliteConnectionRepository as their common base instead, and drop the "..".-relative schema
+  imports across sqlite/ in favor of absolute agentctl.storage.schema imports.
+
+* refactor(tests): split polyfactory-based and custom storage factories
+
+tests/factories.py mixed two different kinds of factory: polyfactory ModelFactory subclasses and the
+  hand-written create_saved_* fixtures that build-and-persist entities through a repository. Move
+  the former to tests/polyfactory.py (its actual role) and repurpose tests/factories.py for the
+  latter, pulled out of tests/storage/conftest.py to shrink it down to just the
+  database/repository/instance fixtures.
+
+* refactor(storage): integrate SQLModel and collapse repositories into one generic class
+
+Row models replace the hand-written SQLAlchemy Core Table objects, so domain<->row conversion
+  becomes model_dump/model_validate instead of a per-column .values() block in every repository. The
+  five concrete repositories collapse into ~5-line declarations over a single generic
+  SqliteRepository[DomainT, RowT], including the precedence-chain store, which previously couldn't
+  share the base class at all. The on-disk schema is unchanged (verified byte-identical DDL), so
+  migration v1 stays v1.
+
+* fix(lint): resolve pylint and mypy findings from poe format
+
+Simplify migrations' try/except (no-else-raise), suppress duplicate-code false positives in storage
+  __init__ re-exports, quiet unused-argument warnings for pytest fixture/test-ordering dependencies,
+  and use .scalar() instead of indexing a possibly-None Row in test_migrations.
+
+* refactor(storage): type repository filter values, tidy sqlite internals
+
+Replace the untyped `**filters: object` protocol with a FilterValue union so filter arguments are
+  checked against what `_encode` actually handles, move `_encode` onto SqliteRepository as a static
+  method, and drop the module-level `_emit_begin` helper in favor of an inline listener. Reflow the
+  precedence-chain assertions that no longer fit the line length after the signature change.
+
+* refactor(tests): register storage factory fixtures via pytest_plugins
+
+Import-and-__all__ was only there to keep ruff's unused-import check quiet for fixtures pulled in
+  purely for pytest's name-based lookup. Register tests.factories as a pytest plugin instead,
+  matching how tests.polyfactory is already registered, so no re-export list is needed.
+
+---------
+
+Co-authored-by: Claude Sonnet 5 <noreply@anthropic.com>
+
+- **writes**: Add safe write layer ([#10](https://github.com/justmatias/agentctl/pull/10),
+  [`46f0595`](https://github.com/justmatias/agentctl/commit/46f059504fb675d3e46ad06edbf7ab6b2a6df28f))
+
+* feat(writes): add safe write layer
+
+Atomic write primitive (temp file + os.replace) so a reader never sees a partial write and a failure
+  before the replace leaves the original untouched; a session-scoped RollbackIndex that timestamps a
+  backup before an overwrite and can restore one file or undo the whole session; and a key-scoped
+  JSON merge helper that updates only the caller-specified top-level keys, leaving unrelated keys
+  and ordering in a shared file like settings.json untouched.
+
+Pure filesystem utility — no dependency on the domain model or storage layer introduced in earlier
+  Phase-0 PRs.
+
+ROADMAP.md PR 0.3.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+* fix(writes): address automated review feedback
+
+- RollbackIndex.backup() now writes the backup via atomic_write instead of a plain write_text, so a
+  process kill mid-write can no longer leave a truncated backup that restore()/restore_all() would
+  silently write back over the original. - atomic_write now preserves an existing file's permission
+  bits before os.replace, instead of silently downgrading them to mkstemp's 0600 default. -
+  merge_json_keys now raises a clear TypeError when the JSON root isn't an object, instead of a bare
+  AttributeError from dict.update; covered by a new test. - Deduplicate the two datetime.now(UTC)
+  calls in backup() into one. - Add logging (debug on the atomic_write primitive, info on
+  backup/restore/restore_all/merge) for these state-changing operations.
+
+* fix(writes): drop module docstrings, align tests with repo conventions
+
+Remove the module docstrings in agentctl/writes/ per PR review comments — the rest of the codebase
+  doesn't use them. Also convert tests/writes/ from class-grouped tests to flat test_* functions and
+  extract the repeated target/RollbackIndex setup into tests/writes/conftest.py fixtures, matching
+  conventions already followed elsewhere in tests/.
+
+* refactor(writes): inline temp-write helper, extract test fixtures
+
+Fold _write_to_temp back into atomic_write now that tests patch os.fsync directly instead of the
+  helper, and move repeated write+backup and fsync-failure setup in the write tests into conftest
+  fixtures.
+
+* refactor(test): simplify backup assertion in test_repeated_backups_are_recorded_in_order
+
+---------
+
+Co-authored-by: Claude Sonnet 5 <noreply@anthropic.com>
+
+
 ## v2.1.0 (2026-08-12)
 
 ### Features
