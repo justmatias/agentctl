@@ -1,7 +1,6 @@
 from .database import Database
 from .migrations import MIGRATIONS, Migration, apply_migrations
-from .precedence_chains import PrecedenceChainStore
-from .repositories import BindingRepository, Repository
+from .repositories import BindingRepository, PrecedenceChainStore, Repository
 from .sqlite import (
     SqliteBindingRepository,
     SqliteConflictRepository,

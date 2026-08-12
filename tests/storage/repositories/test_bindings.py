@@ -23,7 +23,7 @@ def test_binding_list_for_extension_filters(
 ) -> None:
     result = binding_repository.list_for_extension(saved_extension.id)
 
-    assert [b.id for b in result] == [saved_binding.id]
+    assert [binding.id for binding in result] == [saved_binding.id]
 
 
 def test_binding_update_persists_changes(

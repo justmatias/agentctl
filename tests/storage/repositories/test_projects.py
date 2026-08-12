@@ -27,7 +27,7 @@ def test_project_list_orders_by_registration(
     earlier_project: Project,
     later_project: Project,
 ) -> None:
-    assert [p.id for p in project_repository.list()] == [
+    assert [project.id for project in project_repository.list()] == [
         earlier_project.id,
         later_project.id,
     ]

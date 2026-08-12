@@ -1,33 +1,29 @@
-import sqlite3
 from uuid import UUID
+
+from sqlalchemy import RowMapping, insert, select, update
 
 from agentctl.domain import Binding
 
+from ..schema import bindings
 from .repository import SqliteRepository
 
 
 class SqliteBindingRepository(SqliteRepository[Binding]):
-    _table = "bindings"
+    _table = bindings
     _entity_name = "binding"
 
     def create(self, binding: Binding) -> None:
         self._write(
-            """
-            INSERT INTO bindings
-                (id, extension_id, harness, scope, file_path, enabled,
-                 sync_state, last_written_hash, last_seen_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(binding.id),
-                str(binding.extension_id),
-                binding.harness.value,
-                binding.scope.value,
-                binding.file_path,
-                int(binding.enabled),
-                binding.sync_state.value,
-                binding.last_written_hash,
-                binding.last_seen_hash,
+            insert(bindings).values(
+                id=str(binding.id),
+                extension_id=str(binding.extension_id),
+                harness=binding.harness.value,
+                scope=binding.scope.value,
+                file_path=binding.file_path,
+                enabled=binding.enabled,
+                sync_state=binding.sync_state.value,
+                last_written_hash=binding.last_written_hash,
+                last_seen_hash=binding.last_seen_hash,
             ),
             action="Created",
             item_id=binding.id,
@@ -35,34 +31,34 @@ class SqliteBindingRepository(SqliteRepository[Binding]):
         )
 
     def list_for_extension(self, extension_id: UUID) -> list[Binding]:
-        rows = self._connection.execute(
-            "SELECT * FROM bindings WHERE extension_id = ?", (str(extension_id),)
-        ).fetchall()
+        rows = (
+            self._connection
+            .execute(
+                select(bindings).where(bindings.c.extension_id == str(extension_id))
+            )
+            .mappings()
+            .fetchall()
+        )
         return [self._row_to_model(row) for row in rows]
 
     def update(self, binding: Binding) -> None:
         self._write(
-            """
-            UPDATE bindings
-            SET extension_id = ?, harness = ?, scope = ?, file_path = ?, enabled = ?,
-                sync_state = ?, last_written_hash = ?, last_seen_hash = ?
-            WHERE id = ?
-            """,
-            (
-                str(binding.extension_id),
-                binding.harness.value,
-                binding.scope.value,
-                binding.file_path,
-                int(binding.enabled),
-                binding.sync_state.value,
-                binding.last_written_hash,
-                binding.last_seen_hash,
-                str(binding.id),
+            update(bindings)
+            .where(bindings.c.id == str(binding.id))
+            .values(
+                extension_id=str(binding.extension_id),
+                harness=binding.harness.value,
+                scope=binding.scope.value,
+                file_path=binding.file_path,
+                enabled=binding.enabled,
+                sync_state=binding.sync_state.value,
+                last_written_hash=binding.last_written_hash,
+                last_seen_hash=binding.last_seen_hash,
             ),
             action="Updated",
             item_id=binding.id,
         )
 
     @staticmethod
-    def _row_to_model(row: sqlite3.Row) -> Binding:
-        return Binding.model_validate({**dict(row), "enabled": bool(row["enabled"])})
+    def _row_to_model(row: RowMapping) -> Binding:
+        return Binding.model_validate(dict(row))

@@ -45,6 +45,7 @@ repos:
           - pydantic-settings==2.15.0
           - pytest==9.1.1
           - polyfactory==3.3.0
+          - sqlalchemy==2.0.52
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.3.0
@@ -56,3 +57,4 @@ repos:
           - pydantic-settings==2.15.0
           - pytest==9.1.1
           - polyfactory==3.3.0
+          - sqlalchemy==2.0.52
