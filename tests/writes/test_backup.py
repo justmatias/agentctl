@@ -33,9 +33,11 @@ def test_repeated_backups_are_recorded_in_order(
     write_and_backup(target, "v1")
     write_and_backup(target, "v2")
 
-    assert [
-        b.backup_path.read_text(encoding="utf-8") for b in rollback_index.backups
-    ] == ["v1", "v2"]
+    backups = [
+        backup.backup_path.read_text(encoding="utf-8")
+        for backup in rollback_index.backups
+    ]
+    assert backups == ["v1", "v2"]
 
 
 def test_restore_writes_back_the_most_recent_backup(
