@@ -8,8 +8,6 @@ import json
 
 import typer
 
-from agentctl.utils import logger
-
 app = typer.Typer(
     name="agentctl",
     help="Local-first control center for AI coding agents.",
@@ -31,8 +29,50 @@ def main(
     ctx.obj = {"json": json_output}
 
 
-def _not_yet_implemented(ctx: typer.Context, command: str) -> None:
-    logger.info(f"Dispatched CLI command: {command}")
+@app.command()
+def status(ctx: typer.Context) -> None:
+    """Cross-harness overview: counts per type/source, needs-review queue, drift/conflict."""
+    if ctx.obj["json"]:
+        typer.echo(json.dumps({"command": "status", "status": "not_yet_implemented"}))
+    else:
+        typer.echo("status: not yet implemented")
+
+
+@app.command()
+def why(ctx: typer.Context, key: str) -> None:
+    """Print the precedence stack for KEY, top to bottom, winner marked."""
+    command = f"why {key}"
+    if ctx.obj["json"]:
+        typer.echo(json.dumps({"command": command, "status": "not_yet_implemented"}))
+    else:
+        typer.echo(f"{command}: not yet implemented")
+
+
+@project_app.command("add")
+def project_add(ctx: typer.Context, path: str) -> None:
+    """Register PATH (must be absolute) as a tracked project."""
+    command = f"project add {path}"
+    if ctx.obj["json"]:
+        typer.echo(json.dumps({"command": command, "status": "not_yet_implemented"}))
+    else:
+        typer.echo(f"{command}: not yet implemented")
+
+
+@project_app.command("list")
+def project_list(ctx: typer.Context) -> None:
+    """List every registered project."""
+    if ctx.obj["json"]:
+        typer.echo(
+            json.dumps({"command": "project list", "status": "not_yet_implemented"})
+        )
+    else:
+        typer.echo("project list: not yet implemented")
+
+
+@project_app.command("remove")
+def project_remove(ctx: typer.Context, path: str) -> None:
+    """Unregister PATH. Never touches files on disk."""
+    command = f"project remove {path}"
     if ctx.obj["json"]:
         typer.echo(json.dumps({"command": command, "status": "not_yet_implemented"}))
     else:
@@ -40,48 +80,29 @@ def _not_yet_implemented(ctx: typer.Context, command: str) -> None:
 
 
 @app.command()
-def status(ctx: typer.Context) -> None:
-    """Cross-harness overview: counts per type/source, needs-review queue, drift/conflict."""
-    _not_yet_implemented(ctx, "status")
-
-
-@app.command()
-def why(ctx: typer.Context, key: str) -> None:
-    """Print the precedence stack for KEY, top to bottom, winner marked."""
-    _not_yet_implemented(ctx, f"why {key}")
-
-
-@project_app.command("add")
-def project_add(ctx: typer.Context, path: str) -> None:
-    """Register PATH (must be absolute) as a tracked project."""
-    _not_yet_implemented(ctx, f"project add {path}")
-
-
-@project_app.command("list")
-def project_list(ctx: typer.Context) -> None:
-    """List every registered project."""
-    _not_yet_implemented(ctx, "project list")
-
-
-@project_app.command("remove")
-def project_remove(ctx: typer.Context, path: str) -> None:
-    """Unregister PATH. Never touches files on disk."""
-    _not_yet_implemented(ctx, f"project remove {path}")
-
-
-@app.command()
 def snapshot(ctx: typer.Context) -> None:
     """Export, run the redaction gate, and commit — printing the redaction report first."""
-    _not_yet_implemented(ctx, "snapshot")
+    if ctx.obj["json"]:
+        typer.echo(
+            json.dumps({"command": "snapshot", "status": "not_yet_implemented"})
+        )
+    else:
+        typer.echo("snapshot: not yet implemented")
 
 
 @app.command()
 def restore(ctx: typer.Context) -> None:
     """Apply a bundle onto this host from a reviewable, confirmed plan."""
-    _not_yet_implemented(ctx, "restore")
+    if ctx.obj["json"]:
+        typer.echo(json.dumps({"command": "restore", "status": "not_yet_implemented"}))
+    else:
+        typer.echo("restore: not yet implemented")
 
 
 @app.command()
 def ui(ctx: typer.Context) -> None:
     """Launch the local web UI in your default browser."""
-    _not_yet_implemented(ctx, "ui")
+    if ctx.obj["json"]:
+        typer.echo(json.dumps({"command": "ui", "status": "not_yet_implemented"}))
+    else:
+        typer.echo("ui: not yet implemented")
