@@ -14,7 +14,7 @@ class Migration:
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         version=1,
-        description="Phase-0 orchestration metadata tables",
+        description="Orchestration metadata tables",
         sql="""
             CREATE TABLE IF NOT EXISTS extensions (
                 id TEXT PRIMARY KEY,
@@ -88,9 +88,8 @@ def apply_migrations(
         )
         """
     )
-    applied = {
-        row[0] for row in connection.execute("SELECT version FROM schema_migrations")
-    }
+    applied_rows = connection.execute("SELECT version FROM schema_migrations")
+    applied = {row[0] for row in applied_rows}
     for migration in sorted(migrations, key=lambda m: m.version):
         if migration.version in applied:
             continue

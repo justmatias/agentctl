@@ -7,13 +7,6 @@ from .migrations import apply_migrations
 
 
 class Database:
-    """Owns a single SQLite connection, schema included.
-
-    The DB holds orchestration metadata only (SPECS.md §9): it is disposable
-    and rebuildable by rescan, never a source of truth for what a harness
-    actually reads from disk.
-    """
-
     def __init__(self, path: str | Path = ":memory:") -> None:
         self._connection = sqlite3.connect(path)
         self._connection.row_factory = sqlite3.Row

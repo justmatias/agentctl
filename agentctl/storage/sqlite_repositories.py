@@ -17,14 +17,8 @@ from agentctl.domain import (
 from agentctl.utils import logger
 
 
-class SqliteRepository[ModelT: BaseModel](ABC):
-    """Shared CRUD for repositories keyed by a single `id` column.
-
-    Subclasses supply the table name, row<->model mapping, and the
-    insert/update statements (columns differ too much per model to
-    generalize those), and get `get`/`list`/`delete` plus the
-    commit+log wrapping for writes for free.
-    """
+class SqliteRepository[T: BaseModel](ABC):
+    """Shared CRUD for repositories keyed by a single `id` column."""
 
     _table: ClassVar[str]
     _entity_name: ClassVar[str]
@@ -33,13 +27,13 @@ class SqliteRepository[ModelT: BaseModel](ABC):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def get(self, item_id: UUID) -> ModelT | None:
+    def get(self, item_id: UUID) -> T | None:
         row = self._connection.execute(
             f"SELECT * FROM {self._table} WHERE id = ?", (str(item_id),)
         ).fetchone()
         return self._row_to_model(row) if row else None
 
-    def list(self) -> list[ModelT]:
+    def list(self) -> list[T]:
         query = f"SELECT * FROM {self._table}"
         if self._list_order_by:
             query += f" ORDER BY {self._list_order_by}"
@@ -69,7 +63,7 @@ class SqliteRepository[ModelT: BaseModel](ABC):
 
     @staticmethod
     @abstractmethod
-    def _row_to_model(row: sqlite3.Row) -> ModelT: ...
+    def _row_to_model(row: sqlite3.Row) -> T: ...
 
 
 class SqliteExtensionRepository(SqliteRepository[Extension]):

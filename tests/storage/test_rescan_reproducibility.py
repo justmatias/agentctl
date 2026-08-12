@@ -38,44 +38,42 @@ def _seed(
     return discovered_extension, discovered_binding, unbound_extension
 
 
-class TestDeletingDbThenRescanning:
-    """SPECS.md §9: the DB is disposable — deleting it and rescanning must
-    reproduce the full inventory, losing only DB-only state (user decisions,
-    and canonical records not yet bound anywhere).
+# SPECS.md §9: the DB is disposable — deleting it and rescanning must
+# reproduce the full inventory, losing only DB-only state (user decisions,
+# and canonical records not yet bound anywhere).
+#
+# No adapter exists yet to perform a real scan (that ships in Phase 1), so
+# "rescan" here is simulated by re-inserting exactly what discovery of the
+# same on-disk state would find.
 
-    No adapter exists yet to perform a real scan (that ships in Phase 1), so
-    "rescan" here is simulated by re-inserting exactly what discovery of the
-    same on-disk state would find.
-    """
 
-    @staticmethod
-    def test_only_db_only_state_is_lost(
-        tmp_path: Path,
-        extension_factory: ExtensionFactory,
-        binding_factory: BindingFactory,
-    ) -> None:
-        db_path = tmp_path / "agentctl.db"
+def test_deleting_db_then_rescanning_only_loses_db_only_state(
+    tmp_path: Path,
+    extension_factory: ExtensionFactory,
+    binding_factory: BindingFactory,
+) -> None:
+    db_path = tmp_path / "agentctl.db"
 
-        db = Database(db_path)
-        discovered_extension, discovered_binding, unbound_extension = _seed(
-            db, extension_factory, binding_factory
-        )
-        db.close()
+    db = Database(db_path)
+    discovered_extension, discovered_binding, unbound_extension = _seed(
+        db, extension_factory, binding_factory
+    )
+    db.close()
 
-        db_path.unlink()
+    db_path.unlink()
 
-        rescanned = Database(db_path)
-        rescanned_extensions = SqliteExtensionRepository(rescanned.connection)
-        rescanned_bindings = SqliteBindingRepository(rescanned.connection)
-        rescanned_conflicts = SqliteConflictRepository(rescanned.connection)
+    rescanned = Database(db_path)
+    rescanned_extensions = SqliteExtensionRepository(rescanned.connection)
+    rescanned_bindings = SqliteBindingRepository(rescanned.connection)
+    rescanned_conflicts = SqliteConflictRepository(rescanned.connection)
 
-        rescanned_extensions.create(discovered_extension)
-        rescanned_bindings.create(discovered_binding)
+    rescanned_extensions.create(discovered_extension)
+    rescanned_bindings.create(discovered_binding)
 
-        assert rescanned_extensions.get(discovered_extension.id) == discovered_extension
-        assert rescanned_bindings.get(discovered_binding.id) == discovered_binding
+    assert rescanned_extensions.get(discovered_extension.id) == discovered_extension
+    assert rescanned_bindings.get(discovered_binding.id) == discovered_binding
 
-        assert rescanned_extensions.get(unbound_extension.id) is None
-        assert rescanned_conflicts.list() == []
+    assert rescanned_extensions.get(unbound_extension.id) is None
+    assert rescanned_conflicts.list() == []
 
-        rescanned.close()
+    rescanned.close()
