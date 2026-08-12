@@ -15,10 +15,11 @@ def test_precedence_chain_upsert_and_get_global_chain(
 ) -> None:
     chain = create_saved_precedence_chain(layers=[consulted_layer])
 
-    assert (
-        precedence_chain_repository.find_one(source=Source.CLAUDE_CODE, project_id=None)
-        == chain
+    found = precedence_chain_repository.find_one(
+        source=Source.CLAUDE_CODE, project_id=None
     )
+
+    assert found == chain
 
 
 def test_precedence_chain_upsert_and_get_project_chain(
@@ -31,16 +32,15 @@ def test_precedence_chain_upsert_and_get_project_chain(
         project_id=project_id, layers=[consulted_layer]
     )
 
-    assert (
-        precedence_chain_repository.find_one(
-            source=Source.CLAUDE_CODE, project_id=project_id
-        )
-        == chain
+    found_project_chain = precedence_chain_repository.find_one(
+        source=Source.CLAUDE_CODE, project_id=project_id
     )
-    assert (
-        precedence_chain_repository.find_one(source=Source.CLAUDE_CODE, project_id=None)
-        is None
+    found_global_chain = precedence_chain_repository.find_one(
+        source=Source.CLAUDE_CODE, project_id=None
     )
+
+    assert found_project_chain == chain
+    assert found_global_chain is None
 
 
 def test_precedence_chain_upsert_replaces_existing_row_for_same_key(
@@ -68,7 +68,8 @@ def test_precedence_chain_delete_removes_row(
 
     precedence_chain_repository.delete_where(source=Source.CLAUDE_CODE, project_id=None)
 
-    assert (
-        precedence_chain_repository.find_one(source=Source.CLAUDE_CODE, project_id=None)
-        is None
+    found = precedence_chain_repository.find_one(
+        source=Source.CLAUDE_CODE, project_id=None
     )
+
+    assert found is None

@@ -10,17 +10,8 @@ from sqlalchemy import Column, ColumnElement, delete, insert, update
 from sqlalchemy.sql import Executable
 from sqlmodel import Session, SQLModel, select
 
+from agentctl.storage.repositories import FilterValue
 from agentctl.utils import logger
-
-
-def _encode(value: object) -> object:
-    if isinstance(value, UUID | Path):
-        return str(value)
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return value
 
 
 class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
@@ -45,20 +36,20 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
 
     def create(self, item: DomainT) -> None:
         self._write_in_transaction(
-            [insert(self._row_model).values(**self._row_data(item))],
+            [insert(self._row_model).values(**self._to_row(item))],
             message=f"Created {self._entity_name} {self._identity(item)}",
         )
 
     def get(self, item_id: UUID) -> DomainT | None:
         return self.find_one(id=item_id)
 
-    def find(self, **filters: object) -> list[DomainT]:
+    def find(self, **filters: FilterValue) -> list[DomainT]:
         query = select(self._row_model)
         for name, value in filters.items():
             query = query.where(self._filter_clause(name, value))
         return [self._to_domain(row) for row in self._session.exec(query).all()]
 
-    def find_one(self, **filters: object) -> DomainT | None:
+    def find_one(self, **filters: FilterValue) -> DomainT | None:
         results = self.find(**filters)
         return results[0] if results else None
 
@@ -73,10 +64,10 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
         statement = update(self._row_model)
         for key in self._natural_key:
             statement = statement.where(
-                self._column(key) == _encode(getattr(item, key))
+                self._column(key) == self._encode(getattr(item, key))
             )
         self._write_in_transaction(
-            [statement.values(**self._row_data(item))],
+            [statement.values(**self._to_row(item))],
             message=f"Updated {self._entity_name} {self._identity(item)}",
         )
 
@@ -84,7 +75,7 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
         self._write_in_transaction(
             [
                 self._natural_key_delete(item),
-                insert(self._row_model).values(**self._row_data(item)),
+                insert(self._row_model).values(**self._to_row(item)),
             ],
             message=f"Upserted {self._entity_name} {self._identity(item)}",
         )
@@ -92,7 +83,7 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
     def delete(self, item_id: UUID) -> None:
         self.delete_where(id=item_id)
 
-    def delete_where(self, **filters: object) -> None:
+    def delete_where(self, **filters: FilterValue) -> None:
         statement = delete(self._row_model)
         for name, value in filters.items():
             statement = statement.where(self._filter_clause(name, value))
@@ -105,7 +96,7 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
         statement = delete(self._row_model)
         for key in self._natural_key:
             statement = statement.where(
-                self._column(key) == _encode(getattr(item, key))
+                self._column(key) == self._encode(getattr(item, key))
             )
         return statement
 
@@ -116,7 +107,7 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
         pairs = zip(self._natural_key, values, strict=True)
         return ", ".join(f"{key}={value}" for key, value in pairs)
 
-    def _row_data(self, item: DomainT) -> dict[str, object]:
+    def _to_row(self, item: DomainT) -> dict[str, object]:
         return self._row_model(**item.model_dump(mode="json")).model_dump()
 
     def _to_domain(self, row: RowT) -> DomainT:
@@ -130,10 +121,23 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
         table = self._row_model.__table__  # type: ignore[attr-defined]
         return cast(Column[Any], table.c[name])
 
-    def _filter_clause(self, name: str, value: object) -> ColumnElement[bool]:
+    def _filter_clause(self, name: str, value: FilterValue) -> ColumnElement[bool]:
         column = self._column(name)
-        encoded = _encode(value)
+        encoded = self._encode(value)
         return column.is_(None) if encoded is None else column == encoded
+
+    @staticmethod
+    def _encode(value: FilterValue) -> object:
+        # `Enum.value` is typed `Any` in typeshed for the base `Enum` class
+        # (subclasses narrow it), so this can't return a tighter alias
+        # without mypy flagging that branch under `warn_return_any`.
+        if isinstance(value, UUID | Path):
+            return str(value)
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
     def _write_in_transaction(
         self, statements: Sequence[Executable], *, message: str

@@ -12,17 +12,14 @@ def _configure_connection(dbapi_connection: object, _connection_record: object) 
     # pysqlite auto-commits DDL outside of any transaction SQLAlchemy tracks,
     # which is what made the old executescript()-based migrations
     # non-atomic. Disabling its own transaction handling (isolation_level =
-    # None) and driving BEGIN ourselves (see `_emit_begin` below) is the
-    # documented SQLAlchemy recipe for genuinely transactional SQLite DDL:
+    # None) and driving BEGIN ourselves (see the "begin" event listener
+    # below) is the documented SQLAlchemy recipe for genuinely
+    # transactional SQLite DDL:
     # https://docs.sqlalchemy.org/en/20/dialects/sqlite.html#serializable-isolation-savepoints-transactional-ddl
     dbapi_connection.isolation_level = None  # type: ignore[attr-defined]
     cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
     cursor.execute("PRAGMA foreign_keys = ON")
     cursor.close()
-
-
-def _emit_begin(connection: Connection) -> None:
-    connection.exec_driver_sql("BEGIN")
 
 
 def create_sqlite_engine(path: str | Path = ":memory:") -> Engine:
@@ -32,7 +29,9 @@ def create_sqlite_engine(path: str | Path = ":memory:") -> Engine:
     """
     engine = create_engine(f"sqlite:///{path}")
     event.listen(engine, "connect", _configure_connection)
-    event.listen(engine, "begin", _emit_begin)
+    event.listen(
+        engine, "begin", lambda connection: connection.exec_driver_sql("BEGIN")
+    )
     return engine
 
 
