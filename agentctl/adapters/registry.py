@@ -1,5 +1,3 @@
-"""Adapter registry: register, look up, and enumerate SourceAdapters (ROADMAP.md PR 0.4)."""
-
 from agentctl.domain import Source
 from agentctl.utils import logger
 

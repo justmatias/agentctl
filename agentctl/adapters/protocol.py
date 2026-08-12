@@ -1,13 +1,3 @@
-"""SourceAdapter protocol: the seam every harness (and `.agents`) plugs into.
-
-SPECS.md §9 lists six adapter responsibilities: locate global-scope config,
-locate project-scope config, parse to canonical shape, serialize back to
-native format, report an ordered precedence chain — including directory
-walk-up behavior and merge semantics per §7.9 — and declare capabilities
-(extension types, scopes, workflow target forms per §7.12.2), so the rest
-of the tool never hardcodes harness-specific behavior.
-"""
-
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -67,7 +57,15 @@ class AdapterCapabilities:
 
 @runtime_checkable
 class SourceAdapter(Protocol):
-    """One adapter per source — a harness, or the shared `.agents` convention."""
+    """One adapter per source — a harness, or the shared `.agents` convention.
+
+    SPECS.md §9 lists six adapter responsibilities: locate global-scope config,
+    locate project-scope config, parse to canonical shape, serialize back to
+    native format, report an ordered precedence chain — including directory
+    walk-up behavior and merge semantics per §7.9 — and declare capabilities
+    (extension types, scopes, workflow target forms per §7.12.2), so the rest
+    of the tool never hardcodes harness-specific behavior.
+    """
 
     source: Source
 

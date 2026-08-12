@@ -1,10 +1,3 @@
-"""NullAdapter: a protocol-conformant SourceAdapter that reads and writes nothing.
-
-Exists so the registry, the precedence-chain contract, and capability
-declaration can be exercised end-to-end without any real harness
-(ROADMAP.md PR 0.4). Not a real adapter — for tests only.
-"""
-
 from pathlib import Path
 
 from agentctl.domain import Extension, ExtensionType, PrecedenceChain, Scope, Source
@@ -19,7 +12,12 @@ from .protocol import (
 
 
 class NullAdapter:
-    """A no-op SourceAdapter: locates nothing, parses nothing, serializes nothing."""
+    """A no-op SourceAdapter: locates nothing, parses nothing, serializes nothing.
+
+    Exists so the registry, the precedence-chain contract, and capability
+    declaration can be exercised end-to-end without any real harness
+    (ROADMAP.md PR 0.4). Not a real adapter — for tests only.
+    """
 
     def __init__(
         self,

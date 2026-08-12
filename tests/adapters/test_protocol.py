@@ -8,82 +8,78 @@ from agentctl.adapters import (
 )
 from agentctl.adapters.testing import NullAdapter
 from agentctl.domain import ExtensionType, PrecedenceChain, Scope, Source
-from tests.factories import make_extension
+from tests.polyfactory import ExtensionFactory
 
 
-class TestNullAdapterConformsToProtocol:
-    @staticmethod
-    def test_isinstance_check_passes() -> None:
-        adapter = NullAdapter(Source.CLAUDE_CODE)
+def test_isinstance_check_passes() -> None:
+    adapter = NullAdapter(Source.CLAUDE_CODE)
 
-        assert isinstance(adapter, SourceAdapter)
+    assert isinstance(adapter, SourceAdapter)
 
 
-class TestNullAdapterBehavior:
-    @staticmethod
-    def test_locate_global_config_returns_nothing() -> None:
-        adapter = NullAdapter(Source.CLAUDE_CODE)
+def test_locate_global_config_returns_nothing() -> None:
+    adapter = NullAdapter(Source.CLAUDE_CODE)
 
-        assert not adapter.locate_global_config()
+    assert not adapter.locate_global_config()
 
-    @staticmethod
-    def test_locate_project_config_returns_nothing() -> None:
-        adapter = NullAdapter(Source.CLAUDE_CODE)
 
-        assert not adapter.locate_project_config(Path("/some/project"))
+def test_locate_project_config_returns_nothing() -> None:
+    adapter = NullAdapter(Source.CLAUDE_CODE)
 
-    @staticmethod
-    def test_parse_returns_no_extensions() -> None:
-        adapter = NullAdapter(Source.CLAUDE_CODE)
+    assert not adapter.locate_project_config(Path("/some/project"))
 
-        assert not adapter.parse(Path("/some/file.json"))
 
-    @staticmethod
-    def test_serialize_returns_empty_string() -> None:
-        adapter = NullAdapter(Source.CLAUDE_CODE)
+def test_parse_returns_no_extensions() -> None:
+    adapter = NullAdapter(Source.CLAUDE_CODE)
 
-        assert adapter.serialize(make_extension()) == ""
+    assert not adapter.parse(Path("/some/file.json"))
 
-    @staticmethod
-    def test_walk_up_behavior_does_not_ascend() -> None:
-        adapter = NullAdapter(Source.CLAUDE_CODE)
 
-        behavior = adapter.walk_up_behavior(ExtensionType.MEMORY_FILE)
+def test_serialize_returns_empty_string(extension_factory: ExtensionFactory) -> None:
+    adapter = NullAdapter(Source.CLAUDE_CODE)
 
-        assert behavior.ascends is False
-        assert behavior.stops_at == WalkUpStop.NONE
-        assert behavior.merge_semantics == MergeSemantics.OVERRIDE
+    assert adapter.serialize(extension_factory.build()) == ""
 
-    @staticmethod
-    def test_precedence_chain_is_empty_and_unscoped_to_a_project() -> None:
-        adapter = NullAdapter(Source.CLAUDE_CODE)
 
-        chain = adapter.precedence_chain(Path("/some/project"))
+def test_walk_up_behavior_does_not_ascend() -> None:
+    adapter = NullAdapter(Source.CLAUDE_CODE)
 
-        assert chain == PrecedenceChain(source=Source.CLAUDE_CODE, project_id=None, layers=[])
+    behavior = adapter.walk_up_behavior(ExtensionType.MEMORY_FILE)
 
-    @staticmethod
-    def test_capabilities_reflects_constructor_arguments() -> None:
-        adapter = NullAdapter(
-            Source.CURSOR,
-            extension_types=frozenset({ExtensionType.MCP_SERVER}),
-            scopes=frozenset({Scope.PROJECT, Scope.USER}),
-            workflow_target_forms=frozenset({WorkflowTargetForm.SKILL}),
-        )
+    assert behavior.ascends is False
+    assert behavior.stops_at == WalkUpStop.NONE
+    assert behavior.merge_semantics == MergeSemantics.OVERRIDE
 
-        capabilities = adapter.capabilities
 
-        assert capabilities.source == Source.CURSOR
-        assert capabilities.extension_types == frozenset({ExtensionType.MCP_SERVER})
-        assert capabilities.scopes == frozenset({Scope.PROJECT, Scope.USER})
-        assert capabilities.workflow_target_forms == frozenset({WorkflowTargetForm.SKILL})
+def test_precedence_chain_is_empty_and_unscoped_to_a_project() -> None:
+    adapter = NullAdapter(Source.CLAUDE_CODE)
 
-    @staticmethod
-    def test_capabilities_default_to_empty() -> None:
-        adapter = NullAdapter(Source.CLAUDE_CODE)
+    chain = adapter.precedence_chain(Path("/some/project"))
 
-        capabilities = adapter.capabilities
+    assert chain == PrecedenceChain(source=Source.CLAUDE_CODE, project_id=None, layers=[])
 
-        assert capabilities.extension_types == frozenset()
-        assert capabilities.scopes == frozenset()
-        assert capabilities.workflow_target_forms == frozenset()
+
+def test_capabilities_reflects_constructor_arguments() -> None:
+    adapter = NullAdapter(
+        Source.CURSOR,
+        extension_types=frozenset({ExtensionType.MCP_SERVER}),
+        scopes=frozenset({Scope.PROJECT, Scope.USER}),
+        workflow_target_forms=frozenset({WorkflowTargetForm.SKILL}),
+    )
+
+    capabilities = adapter.capabilities
+
+    assert capabilities.source == Source.CURSOR
+    assert capabilities.extension_types == frozenset({ExtensionType.MCP_SERVER})
+    assert capabilities.scopes == frozenset({Scope.PROJECT, Scope.USER})
+    assert capabilities.workflow_target_forms == frozenset({WorkflowTargetForm.SKILL})
+
+
+def test_capabilities_default_to_empty() -> None:
+    adapter = NullAdapter(Source.CLAUDE_CODE)
+
+    capabilities = adapter.capabilities
+
+    assert capabilities.extension_types == frozenset()
+    assert capabilities.scopes == frozenset()
+    assert capabilities.workflow_target_forms == frozenset()
