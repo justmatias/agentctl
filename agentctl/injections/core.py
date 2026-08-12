@@ -1,4 +1,4 @@
-"""DI bindings for CoreService, following the pattern in `sample.py`."""
+"""DI bindings for CoreService."""
 
 from pathlib import Path
 
