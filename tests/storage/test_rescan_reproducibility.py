@@ -1,13 +1,41 @@
 from pathlib import Path
 
-from agentctl.domain import Conflict, ConflictResolution
-from agentctl.storage import Database
-from agentctl.storage.sqlite_repositories import (
+from agentctl.domain import Binding, Conflict, ConflictResolution, Extension
+from agentctl.storage import (
+    Database,
     SqliteBindingRepository,
     SqliteConflictRepository,
     SqliteExtensionRepository,
 )
-from tests.factories import make_binding, make_extension
+from tests.factories import BindingFactory, ExtensionFactory
+
+
+def _seed(
+    db: Database, extension_factory: ExtensionFactory, binding_factory: BindingFactory
+) -> tuple[Extension, Binding, Extension]:
+    """Populate `db` as discovery of the on-disk state would: an extension with
+    a binding, an intentionally-kept conflict, and an unbound extension.
+    """
+    extension_repo = SqliteExtensionRepository(db.connection)
+    binding_repo = SqliteBindingRepository(db.connection)
+    conflict_repo = SqliteConflictRepository(db.connection)
+
+    discovered_extension = extension_factory.build(name="github")
+    extension_repo.create(discovered_extension)
+    discovered_binding = binding_factory.build(extension_id=discovered_extension.id)
+    binding_repo.create(discovered_binding)
+
+    unbound_extension = extension_factory.build(name="orphaned")
+    extension_repo.create(unbound_extension)
+
+    conflict_repo.create(
+        Conflict(
+            extension_id=discovered_extension.id,
+            binding_ids=[discovered_binding.id],
+            resolution=ConflictResolution.KEEP_BOTH_INTENTIONALLY,
+        )
+    )
+    return discovered_extension, discovered_binding, unbound_extension
 
 
 class TestDeletingDbThenRescanning:
@@ -21,28 +49,17 @@ class TestDeletingDbThenRescanning:
     """
 
     @staticmethod
-    def test_only_db_only_state_is_lost(tmp_path: Path) -> None:
+    def test_only_db_only_state_is_lost(
+        tmp_path: Path,
+        extension_factory: ExtensionFactory,
+        binding_factory: BindingFactory,
+    ) -> None:
         db_path = tmp_path / "agentctl.db"
 
         db = Database(db_path)
-        extension_repo = SqliteExtensionRepository(db.connection)
-        binding_repo = SqliteBindingRepository(db.connection)
-        conflict_repo = SqliteConflictRepository(db.connection)
-
-        discovered_extension = make_extension(name="github")
-        extension_repo.create(discovered_extension)
-        discovered_binding = make_binding(discovered_extension.id)
-        binding_repo.create(discovered_binding)
-
-        unbound_extension = make_extension(name="orphaned")
-        extension_repo.create(unbound_extension)
-
-        conflict = Conflict(
-            extension_id=discovered_extension.id,
-            binding_ids=[discovered_binding.id],
-            resolution=ConflictResolution.KEEP_BOTH_INTENTIONALLY,
+        discovered_extension, discovered_binding, unbound_extension = _seed(
+            db, extension_factory, binding_factory
         )
-        conflict_repo.create(conflict)
         db.close()
 
         db_path.unlink()

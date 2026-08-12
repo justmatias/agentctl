@@ -3,34 +3,29 @@ from uuid import uuid4
 from agentctl.domain import (
     Conflict,
     ConflictResolution,
+    ConsultedLayer,
     LayerOrigin,
-    LayerStatus,
     PrecedenceChain,
-    PrecedenceLayer,
     Project,
     Scope,
     Source,
 )
-from agentctl.storage import Database
-from agentctl.storage.sqlite_repositories import (
+from agentctl.storage import (
+    Database,
     SqliteBindingRepository,
     SqliteConflictRepository,
     SqliteExtensionRepository,
     SqlitePrecedenceChainRepository,
     SqliteProjectRepository,
 )
-from tests.factories import make_binding, make_extension
+from tests.factories import BindingFactory, ExtensionFactory
 
 
-class TestSqliteExtensionRepository:
-    @staticmethod
-    def test_create_and_get_round_trip(database: Database) -> None:
-        repo = SqliteExtensionRepository(database.connection)
-        extension = make_extension()
-
-        repo.create(extension)
-
-        assert repo.get(extension.id) == extension
+class TestSqliteRepositoryCrud:
+    """The shared `SqliteRepository` base's get/list/update/delete behavior,
+    exercised once via `SqliteExtensionRepository`. Repositories below only
+    need their own create/row-mapping tests, plus whatever is unique to them.
+    """
 
     @staticmethod
     def test_get_missing_returns_none(database: Database) -> None:
@@ -39,30 +34,36 @@ class TestSqliteExtensionRepository:
         assert repo.get(uuid4()) is None
 
     @staticmethod
-    def test_list_returns_all_created(database: Database) -> None:
+    def test_list_returns_all_created(
+        database: Database, extension_factory: ExtensionFactory
+    ) -> None:
         repo = SqliteExtensionRepository(database.connection)
-        first = make_extension(name="a")
-        second = make_extension(name="b")
+        first = extension_factory.build(name="a")
+        second = extension_factory.build(name="b")
         repo.create(first)
         repo.create(second)
 
         assert {e.id for e in repo.list()} == {first.id, second.id}
 
     @staticmethod
-    def test_update_persists_changes(database: Database) -> None:
+    def test_update_persists_changes(
+        database: Database, extension_factory: ExtensionFactory
+    ) -> None:
         repo = SqliteExtensionRepository(database.connection)
-        extension = make_extension()
+        extension = extension_factory.build()
         repo.create(extension)
 
         renamed = extension.model_copy(update={"name": "renamed"})
         repo.update(renamed)
 
-        assert repo.get(extension.id).name == "renamed"  # type: ignore[union-attr]
+        assert repo.get(extension.id) == renamed
 
     @staticmethod
-    def test_delete_removes_row(database: Database) -> None:
+    def test_delete_removes_row(
+        database: Database, extension_factory: ExtensionFactory
+    ) -> None:
         repo = SqliteExtensionRepository(database.connection)
-        extension = make_extension()
+        extension = extension_factory.build()
         repo.create(extension)
 
         repo.delete(extension.id)
@@ -70,27 +71,48 @@ class TestSqliteExtensionRepository:
         assert repo.get(extension.id) is None
 
 
+class TestSqliteExtensionRepository:
+    @staticmethod
+    def test_create_and_get_round_trip(
+        database: Database, extension_factory: ExtensionFactory
+    ) -> None:
+        repo = SqliteExtensionRepository(database.connection)
+        extension = extension_factory.build()
+
+        repo.create(extension)
+
+        assert repo.get(extension.id) == extension
+
+
 class TestSqliteBindingRepository:
     @staticmethod
-    def test_create_and_get_round_trip(database: Database) -> None:
-        extension = make_extension()
+    def test_create_and_get_round_trip(
+        database: Database,
+        extension_factory: ExtensionFactory,
+        binding_factory: BindingFactory,
+    ) -> None:
+        extension = extension_factory.build()
         SqliteExtensionRepository(database.connection).create(extension)
         repo = SqliteBindingRepository(database.connection)
-        binding = make_binding(extension.id)
+        binding = binding_factory.build(extension_id=extension.id)
 
         repo.create(binding)
 
         assert repo.get(binding.id) == binding
 
     @staticmethod
-    def test_list_for_extension_filters(database: Database) -> None:
-        extension = make_extension()
+    def test_list_for_extension_filters(
+        database: Database,
+        extension_factory: ExtensionFactory,
+        binding_factory: BindingFactory,
+    ) -> None:
+        extension = extension_factory.build()
         SqliteExtensionRepository(database.connection).create(extension)
-        other_extension = make_extension(name="other")
+        other_extension = extension_factory.build()
         SqliteExtensionRepository(database.connection).create(other_extension)
         repo = SqliteBindingRepository(database.connection)
-        matching = make_binding(extension.id)
-        other = make_binding(other_extension.id)
+        matching = binding_factory.build(extension_id=extension.id)
+        other = binding_factory.build(extension_id=other_extension.id)
         repo.create(matching)
         repo.create(other)
 
@@ -99,49 +121,33 @@ class TestSqliteBindingRepository:
         assert [b.id for b in result] == [matching.id]
 
     @staticmethod
-    def test_update_persists_changes(database: Database) -> None:
-        extension = make_extension()
+    def test_update_persists_changes(
+        database: Database,
+        extension_factory: ExtensionFactory,
+        binding_factory: BindingFactory,
+    ) -> None:
+        extension = extension_factory.build()
         SqliteExtensionRepository(database.connection).create(extension)
         repo = SqliteBindingRepository(database.connection)
-        binding = make_binding(extension.id)
+        binding = binding_factory.build(extension_id=extension.id, enabled=True)
         repo.create(binding)
 
         disabled = binding.model_copy(update={"enabled": False})
         repo.update(disabled)
 
-        assert repo.get(binding.id).enabled is False  # type: ignore[union-attr]
-
-    @staticmethod
-    def test_delete_removes_row(database: Database) -> None:
-        extension = make_extension()
-        SqliteExtensionRepository(database.connection).create(extension)
-        repo = SqliteBindingRepository(database.connection)
-        binding = make_binding(extension.id)
-        repo.create(binding)
-
-        repo.delete(binding.id)
-
-        assert repo.get(binding.id) is None
-
-    @staticmethod
-    def test_list_returns_all_bindings(database: Database) -> None:
-        extension = make_extension()
-        SqliteExtensionRepository(database.connection).create(extension)
-        repo = SqliteBindingRepository(database.connection)
-        first = make_binding(extension.id)
-        second = make_binding(extension.id, file_path=".claude/settings.local.json")
-        repo.create(first)
-        repo.create(second)
-
-        assert {b.id for b in repo.list()} == {first.id, second.id}
+        assert repo.get(binding.id) == disabled
 
 
 class TestSqliteConflictRepository:
     @staticmethod
-    def test_create_and_get_round_trip(database: Database) -> None:
-        extension = make_extension()
+    def test_create_and_get_round_trip(
+        database: Database,
+        extension_factory: ExtensionFactory,
+        binding_factory: BindingFactory,
+    ) -> None:
+        extension = extension_factory.build()
         SqliteExtensionRepository(database.connection).create(extension)
-        binding = make_binding(extension.id)
+        binding = binding_factory.build(extension_id=extension.id)
         SqliteBindingRepository(database.connection).create(binding)
         repo = SqliteConflictRepository(database.connection)
         conflict = Conflict(extension_id=extension.id, binding_ids=[binding.id])
@@ -151,8 +157,10 @@ class TestSqliteConflictRepository:
         assert repo.get(conflict.id) == conflict
 
     @staticmethod
-    def test_keep_both_intentionally_persists(database: Database) -> None:
-        extension = make_extension()
+    def test_keep_both_intentionally_persists(
+        database: Database, extension_factory: ExtensionFactory
+    ) -> None:
+        extension = extension_factory.build()
         SqliteExtensionRepository(database.connection).create(extension)
         repo = SqliteConflictRepository(database.connection)
         conflict = Conflict(
@@ -168,22 +176,14 @@ class TestSqliteConflictRepository:
         assert reloaded.resolution == ConflictResolution.KEEP_BOTH_INTENTIONALLY
 
     @staticmethod
-    def test_delete_removes_row(database: Database) -> None:
-        extension = make_extension()
+    def test_update_persists_resolution(
+        database: Database,
+        extension_factory: ExtensionFactory,
+        binding_factory: BindingFactory,
+    ) -> None:
+        extension = extension_factory.build()
         SqliteExtensionRepository(database.connection).create(extension)
-        repo = SqliteConflictRepository(database.connection)
-        conflict = Conflict(extension_id=extension.id, binding_ids=[])
-        repo.create(conflict)
-
-        repo.delete(conflict.id)
-
-        assert repo.get(conflict.id) is None
-
-    @staticmethod
-    def test_update_persists_resolution(database: Database) -> None:
-        extension = make_extension()
-        SqliteExtensionRepository(database.connection).create(extension)
-        binding = make_binding(extension.id)
+        binding = binding_factory.build(extension_id=extension.id)
         SqliteBindingRepository(database.connection).create(binding)
         repo = SqliteConflictRepository(database.connection)
         conflict = Conflict(extension_id=extension.id, binding_ids=[binding.id])
@@ -215,6 +215,17 @@ class TestSqliteProjectRepository:
         assert repo.get(project.id) == project
 
     @staticmethod
+    def test_update_persists_changes(database: Database) -> None:
+        repo = SqliteProjectRepository(database.connection)
+        project = Project(path="/home/user/code/demo", display_name="demo")
+        repo.create(project)
+
+        renamed = project.model_copy(update={"display_name": "renamed"})
+        repo.update(renamed)
+
+        assert repo.get(project.id) == renamed
+
+    @staticmethod
     def test_list_orders_by_registration(database: Database) -> None:
         repo = SqliteProjectRepository(database.connection)
         first = Project(path="/home/user/code/a", display_name="a")
@@ -224,41 +235,21 @@ class TestSqliteProjectRepository:
 
         assert [p.id for p in repo.list()] == [first.id, second.id]
 
-    @staticmethod
-    def test_delete_removes_row(database: Database) -> None:
-        repo = SqliteProjectRepository(database.connection)
-        project = Project(path="/home/user/code/demo", display_name="demo")
-        repo.create(project)
 
-        repo.delete(project.id)
-
-        assert repo.get(project.id) is None
-
-    @staticmethod
-    def test_update_persists_changes(database: Database) -> None:
-        repo = SqliteProjectRepository(database.connection)
-        project = Project(path="/home/user/code/demo", display_name="demo")
-        repo.create(project)
-
-        renamed = project.model_copy(update={"display_name": "renamed"})
-        repo.update(renamed)
-
-        assert repo.get(project.id).display_name == "renamed"  # type: ignore[union-attr]
-
-
-def _make_layer(*, rank: int = 1) -> PrecedenceLayer:
-    return PrecedenceLayer(
+def _make_layer(*, rank: int = 1) -> ConsultedLayer:
+    return ConsultedLayer(
         scope=Scope.USER,
         file_path="~/.claude/settings.json",
         exists=True,
         order_rank=rank,
-        status=LayerStatus.CONSULTED,
         origin=LayerOrigin.GLOBAL,
         resolves=True,
     )
 
 
 class TestSqlitePrecedenceChainRepository:
+    """Keyed by (source, project_id), not an id — doesn't fit the id-keyed base."""
+
     @staticmethod
     def test_upsert_and_get_global_chain(database: Database) -> None:
         repo = SqlitePrecedenceChainRepository(database.connection)
@@ -290,7 +281,9 @@ class TestSqlitePrecedenceChainRepository:
         chains = repo.list()
 
         assert len(chains) == 1
-        assert chains[0].layers[0].order_rank == 2
+        layer = chains[0].layers[0]
+        assert isinstance(layer, ConsultedLayer)
+        assert layer.order_rank == 2
 
     @staticmethod
     def test_delete_removes_row(database: Database) -> None:

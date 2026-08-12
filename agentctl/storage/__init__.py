@@ -1,5 +1,3 @@
-"""SQLite-backed storage for orchestration metadata (ROADMAP.md PR 0.2)."""
-
 from .database import Database
 from .migrations import MIGRATIONS, Migration, apply_migrations
 from .repositories import (

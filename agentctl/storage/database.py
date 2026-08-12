@@ -1,5 +1,3 @@
-"""SQLite connection wrapper that applies migrations on open (ROADMAP.md PR 0.2)."""
-
 import sqlite3
 from pathlib import Path
 from types import TracebackType

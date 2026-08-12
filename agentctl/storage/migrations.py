@@ -1,5 +1,3 @@
-"""Linear versioned-DDL migration runner (ROADMAP.md PR 0.2)."""
-
 import sqlite3
 from dataclasses import dataclass
 

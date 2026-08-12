@@ -1,9 +1,3 @@
-"""Repository interfaces the core service depends on (ROADMAP.md PR 0.2).
-
-Defined as `Protocol`s so the core service can be wired against a fake in
-tests without depending on SQLite at all.
-"""
-
 from typing import Protocol
 from uuid import UUID
 

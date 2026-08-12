@@ -1,8 +1,10 @@
-"""SQLite implementations of the storage repositories (ROADMAP.md PR 0.2)."""
-
 import json
 import sqlite3
+from abc import ABC, abstractmethod
+from typing import ClassVar
 from uuid import UUID, uuid4
+
+from pydantic import BaseModel
 
 from agentctl.domain import (
     Binding,
@@ -15,71 +17,104 @@ from agentctl.domain import (
 from agentctl.utils import logger
 
 
-class SqliteExtensionRepository:
+class SqliteRepository[ModelT: BaseModel](ABC):
+    """Shared CRUD for repositories keyed by a single `id` column.
+
+    Subclasses supply the table name, row<->model mapping, and the
+    insert/update statements (columns differ too much per model to
+    generalize those), and get `get`/`list`/`delete` plus the
+    commit+log wrapping for writes for free.
+    """
+
+    _table: ClassVar[str]
+    _entity_name: ClassVar[str]
+    _list_order_by: ClassVar[str | None] = None
+
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def create(self, extension: Extension) -> None:
-        with self._connection:
-            self._connection.execute(
-                """
-                INSERT INTO extensions
-                    (id, type, name, origin_harness, canonical_config, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    str(extension.id),
-                    extension.type.value,
-                    extension.name,
-                    extension.origin_harness.value
-                    if extension.origin_harness
-                    else None,
-                    extension.canonical_config.model_dump_json(),
-                    extension.created_at.isoformat(),
-                    extension.updated_at.isoformat(),
-                ),
-            )
-        logger.info(f"Created extension {extension.id}")
-
-    def get(self, extension_id: UUID) -> Extension | None:
+    def get(self, item_id: UUID) -> ModelT | None:
         row = self._connection.execute(
-            "SELECT * FROM extensions WHERE id = ?", (str(extension_id),)
+            f"SELECT * FROM {self._table} WHERE id = ?", (str(item_id),)
         ).fetchone()
         return self._row_to_model(row) if row else None
 
-    def list(self) -> list[Extension]:
-        rows = self._connection.execute(
-            "SELECT * FROM extensions ORDER BY created_at"
-        ).fetchall()
+    def list(self) -> list[ModelT]:
+        query = f"SELECT * FROM {self._table}"
+        if self._list_order_by:
+            query += f" ORDER BY {self._list_order_by}"
+        rows = self._connection.execute(query).fetchall()
         return [self._row_to_model(row) for row in rows]
 
-    def update(self, extension: Extension) -> None:
-        with self._connection:
-            self._connection.execute(
-                """
-                UPDATE extensions
-                SET type = ?, name = ?, origin_harness = ?, canonical_config = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    extension.type.value,
-                    extension.name,
-                    extension.origin_harness.value
-                    if extension.origin_harness
-                    else None,
-                    extension.canonical_config.model_dump_json(),
-                    extension.updated_at.isoformat(),
-                    str(extension.id),
-                ),
-            )
-        logger.info(f"Updated extension {extension.id}")
+    def delete(self, item_id: UUID) -> None:
+        self._write(
+            f"DELETE FROM {self._table} WHERE id = ?",
+            (str(item_id),),
+            action="Deleted",
+            item_id=item_id,
+        )
 
-    def delete(self, extension_id: UUID) -> None:
+    def _write(
+        self,
+        sql: str,
+        params: tuple[object, ...],
+        *,
+        action: str,
+        item_id: object,
+        extra: str = "",
+    ) -> None:
         with self._connection:
-            self._connection.execute(
-                "DELETE FROM extensions WHERE id = ?", (str(extension_id),)
-            )
-        logger.info(f"Deleted extension {extension_id}")
+            self._connection.execute(sql, params)
+        logger.info(f"{action} {self._entity_name} {item_id}{extra}")
+
+    @staticmethod
+    @abstractmethod
+    def _row_to_model(row: sqlite3.Row) -> ModelT: ...
+
+
+class SqliteExtensionRepository(SqliteRepository[Extension]):
+    _table = "extensions"
+    _entity_name = "extension"
+    _list_order_by = "created_at"
+
+    def create(self, extension: Extension) -> None:
+        self._write(
+            """
+            INSERT INTO extensions
+                (id, type, name, origin_harness, canonical_config, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(extension.id),
+                extension.type.value,
+                extension.name,
+                extension.origin_harness.value if extension.origin_harness else None,
+                extension.canonical_config.model_dump_json(),
+                extension.created_at.isoformat(),
+                extension.updated_at.isoformat(),
+            ),
+            action="Created",
+            item_id=extension.id,
+        )
+
+    def update(self, extension: Extension) -> None:
+        self._write(
+            """
+            UPDATE extensions
+            SET type = ?, name = ?, origin_harness = ?, canonical_config = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                extension.type.value,
+                extension.name,
+                extension.origin_harness.value if extension.origin_harness else None,
+                extension.canonical_config.model_dump_json(),
+                extension.updated_at.isoformat(),
+                str(extension.id),
+            ),
+            action="Updated",
+            item_id=extension.id,
+        )
 
     @staticmethod
     def _row_to_model(row: sqlite3.Row) -> Extension:
@@ -94,40 +129,33 @@ class SqliteExtensionRepository:
         })
 
 
-class SqliteBindingRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self._connection = connection
+class SqliteBindingRepository(SqliteRepository[Binding]):
+    _table = "bindings"
+    _entity_name = "binding"
 
     def create(self, binding: Binding) -> None:
-        with self._connection:
-            self._connection.execute(
-                """
-                INSERT INTO bindings
-                    (id, extension_id, harness, scope, file_path, enabled,
-                     sync_state, last_written_hash, last_seen_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    str(binding.id),
-                    str(binding.extension_id),
-                    binding.harness.value,
-                    binding.scope.value,
-                    binding.file_path,
-                    int(binding.enabled),
-                    binding.sync_state.value,
-                    binding.last_written_hash,
-                    binding.last_seen_hash,
-                ),
-            )
-        logger.info(
-            f"Created binding {binding.id} for extension {binding.extension_id}"
+        self._write(
+            """
+            INSERT INTO bindings
+                (id, extension_id, harness, scope, file_path, enabled,
+                 sync_state, last_written_hash, last_seen_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(binding.id),
+                str(binding.extension_id),
+                binding.harness.value,
+                binding.scope.value,
+                binding.file_path,
+                int(binding.enabled),
+                binding.sync_state.value,
+                binding.last_written_hash,
+                binding.last_seen_hash,
+            ),
+            action="Created",
+            item_id=binding.id,
+            extra=f" for extension {binding.extension_id}",
         )
-
-    def get(self, binding_id: UUID) -> Binding | None:
-        row = self._connection.execute(
-            "SELECT * FROM bindings WHERE id = ?", (str(binding_id),)
-        ).fetchone()
-        return self._row_to_model(row) if row else None
 
     def list_for_extension(self, extension_id: UUID) -> list[Binding]:
         rows = self._connection.execute(
@@ -135,39 +163,28 @@ class SqliteBindingRepository:
         ).fetchall()
         return [self._row_to_model(row) for row in rows]
 
-    def list(self) -> list[Binding]:
-        rows = self._connection.execute("SELECT * FROM bindings").fetchall()
-        return [self._row_to_model(row) for row in rows]
-
     def update(self, binding: Binding) -> None:
-        with self._connection:
-            self._connection.execute(
-                """
-                UPDATE bindings
-                SET extension_id = ?, harness = ?, scope = ?, file_path = ?, enabled = ?,
-                    sync_state = ?, last_written_hash = ?, last_seen_hash = ?
-                WHERE id = ?
-                """,
-                (
-                    str(binding.extension_id),
-                    binding.harness.value,
-                    binding.scope.value,
-                    binding.file_path,
-                    int(binding.enabled),
-                    binding.sync_state.value,
-                    binding.last_written_hash,
-                    binding.last_seen_hash,
-                    str(binding.id),
-                ),
-            )
-        logger.info(f"Updated binding {binding.id}")
-
-    def delete(self, binding_id: UUID) -> None:
-        with self._connection:
-            self._connection.execute(
-                "DELETE FROM bindings WHERE id = ?", (str(binding_id),)
-            )
-        logger.info(f"Deleted binding {binding_id}")
+        self._write(
+            """
+            UPDATE bindings
+            SET extension_id = ?, harness = ?, scope = ?, file_path = ?, enabled = ?,
+                sync_state = ?, last_written_hash = ?, last_seen_hash = ?
+            WHERE id = ?
+            """,
+            (
+                str(binding.extension_id),
+                binding.harness.value,
+                binding.scope.value,
+                binding.file_path,
+                int(binding.enabled),
+                binding.sync_state.value,
+                binding.last_written_hash,
+                binding.last_seen_hash,
+                str(binding.id),
+            ),
+            action="Updated",
+            item_id=binding.id,
+        )
 
     @staticmethod
     def _row_to_model(row: sqlite3.Row) -> Binding:
@@ -184,68 +201,50 @@ class SqliteBindingRepository:
         })
 
 
-class SqliteConflictRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self._connection = connection
+class SqliteConflictRepository(SqliteRepository[Conflict]):
+    _table = "conflicts"
+    _entity_name = "conflict"
 
     def create(self, conflict: Conflict) -> None:
-        with self._connection:
-            self._connection.execute(
-                """
-                INSERT INTO conflicts
-                    (id, extension_id, binding_ids, resolved_binding_id, resolution)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    str(conflict.id),
-                    str(conflict.extension_id),
-                    json.dumps([str(bid) for bid in conflict.binding_ids]),
-                    str(conflict.resolved_binding_id)
-                    if conflict.resolved_binding_id
-                    else None,
-                    conflict.resolution.value,
-                ),
-            )
-        logger.info(
-            f"Created conflict {conflict.id} for extension {conflict.extension_id}"
+        self._write(
+            """
+            INSERT INTO conflicts
+                (id, extension_id, binding_ids, resolved_binding_id, resolution)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                str(conflict.id),
+                str(conflict.extension_id),
+                json.dumps([str(bid) for bid in conflict.binding_ids]),
+                str(conflict.resolved_binding_id)
+                if conflict.resolved_binding_id
+                else None,
+                conflict.resolution.value,
+            ),
+            action="Created",
+            item_id=conflict.id,
+            extra=f" for extension {conflict.extension_id}",
         )
 
-    def get(self, conflict_id: UUID) -> Conflict | None:
-        row = self._connection.execute(
-            "SELECT * FROM conflicts WHERE id = ?", (str(conflict_id),)
-        ).fetchone()
-        return self._row_to_model(row) if row else None
-
-    def list(self) -> list[Conflict]:
-        rows = self._connection.execute("SELECT * FROM conflicts").fetchall()
-        return [self._row_to_model(row) for row in rows]
-
     def update(self, conflict: Conflict) -> None:
-        with self._connection:
-            self._connection.execute(
-                """
-                UPDATE conflicts
-                SET extension_id = ?, binding_ids = ?, resolved_binding_id = ?, resolution = ?
-                WHERE id = ?
-                """,
-                (
-                    str(conflict.extension_id),
-                    json.dumps([str(bid) for bid in conflict.binding_ids]),
-                    str(conflict.resolved_binding_id)
-                    if conflict.resolved_binding_id
-                    else None,
-                    conflict.resolution.value,
-                    str(conflict.id),
-                ),
-            )
-        logger.info(f"Updated conflict {conflict.id}")
-
-    def delete(self, conflict_id: UUID) -> None:
-        with self._connection:
-            self._connection.execute(
-                "DELETE FROM conflicts WHERE id = ?", (str(conflict_id),)
-            )
-        logger.info(f"Deleted conflict {conflict_id}")
+        self._write(
+            """
+            UPDATE conflicts
+            SET extension_id = ?, binding_ids = ?, resolved_binding_id = ?, resolution = ?
+            WHERE id = ?
+            """,
+            (
+                str(conflict.extension_id),
+                json.dumps([str(bid) for bid in conflict.binding_ids]),
+                str(conflict.resolved_binding_id)
+                if conflict.resolved_binding_id
+                else None,
+                conflict.resolution.value,
+                str(conflict.id),
+            ),
+            action="Updated",
+            item_id=conflict.id,
+        )
 
     @staticmethod
     def _row_to_model(row: sqlite3.Row) -> Conflict:
@@ -258,62 +257,45 @@ class SqliteConflictRepository:
         })
 
 
-class SqliteProjectRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self._connection = connection
+class SqliteProjectRepository(SqliteRepository[Project]):
+    _table = "projects"
+    _entity_name = "project"
+    _list_order_by = "registered_at"
 
     def create(self, project: Project) -> None:
-        with self._connection:
-            self._connection.execute(
-                """
-                INSERT INTO projects (id, path, display_name, registered_at, detected_sources)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    str(project.id),
-                    str(project.path),
-                    project.display_name,
-                    project.registered_at.isoformat(),
-                    json.dumps([source.value for source in project.detected_sources]),
-                ),
-            )
-        logger.info(f"Created project {project.id} ({project.path})")
-
-    def get(self, project_id: UUID) -> Project | None:
-        row = self._connection.execute(
-            "SELECT * FROM projects WHERE id = ?", (str(project_id),)
-        ).fetchone()
-        return self._row_to_model(row) if row else None
-
-    def list(self) -> list[Project]:
-        rows = self._connection.execute(
-            "SELECT * FROM projects ORDER BY registered_at"
-        ).fetchall()
-        return [self._row_to_model(row) for row in rows]
+        self._write(
+            """
+            INSERT INTO projects (id, path, display_name, registered_at, detected_sources)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                str(project.id),
+                str(project.path),
+                project.display_name,
+                project.registered_at.isoformat(),
+                json.dumps([source.value for source in project.detected_sources]),
+            ),
+            action="Created",
+            item_id=project.id,
+            extra=f" ({project.path})",
+        )
 
     def update(self, project: Project) -> None:
-        with self._connection:
-            self._connection.execute(
-                """
-                UPDATE projects
-                SET path = ?, display_name = ?, detected_sources = ?
-                WHERE id = ?
-                """,
-                (
-                    str(project.path),
-                    project.display_name,
-                    json.dumps([source.value for source in project.detected_sources]),
-                    str(project.id),
-                ),
-            )
-        logger.info(f"Updated project {project.id}")
-
-    def delete(self, project_id: UUID) -> None:
-        with self._connection:
-            self._connection.execute(
-                "DELETE FROM projects WHERE id = ?", (str(project_id),)
-            )
-        logger.info(f"Deleted project {project_id}")
+        self._write(
+            """
+            UPDATE projects
+            SET path = ?, display_name = ?, detected_sources = ?
+            WHERE id = ?
+            """,
+            (
+                str(project.path),
+                project.display_name,
+                json.dumps([source.value for source in project.detected_sources]),
+                str(project.id),
+            ),
+            action="Updated",
+            item_id=project.id,
+        )
 
     @staticmethod
     def _row_to_model(row: sqlite3.Row) -> Project:
@@ -327,7 +309,12 @@ class SqliteProjectRepository:
 
 
 class SqlitePrecedenceChainRepository:
-    """Stores a cache row per (source, project_id); never the source of truth (SPECS §9)."""
+    """Stores a cache row per (source, project_id); never the source of truth
+    (SPECS §9).
+
+    Not a `SqliteRepository`: it's keyed by (source, project_id) rather than
+    an id, and has `upsert` instead of `create`/`update`.
+    """
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -342,7 +329,10 @@ class SqlitePrecedenceChainRepository:
                 ),
             )
             self._connection.execute(
-                "INSERT INTO precedence_chains (id, source, project_id, layers) VALUES (?, ?, ?, ?)",
+                """
+                INSERT INTO precedence_chains (id, source, project_id, layers)
+                VALUES (?, ?, ?, ?)
+                """,
                 (
                     str(uuid4()),
                     chain.source.value,
