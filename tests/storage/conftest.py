@@ -12,6 +12,7 @@ from agentctl.domain import (
     LayerOrigin,
     Project,
     Scope,
+    Source,
 )
 from agentctl.storage import (
     Database,
@@ -84,6 +85,11 @@ def saved_extension(create_saved_extension: Callable[..., Extension]) -> Extensi
 
 
 @pytest.fixture
+def other_extension(create_saved_extension: Callable[..., Extension]) -> Extension:
+    return create_saved_extension()
+
+
+@pytest.fixture
 def create_saved_binding(
     binding_repository: SqliteBindingRepository,
     binding_factory: BindingFactory,
@@ -104,6 +110,13 @@ def saved_binding(
 
 
 @pytest.fixture
+def other_binding(
+    create_saved_binding: Callable[..., Binding], other_extension: Extension
+) -> Binding:
+    return create_saved_binding(extension_id=other_extension.id)
+
+
+@pytest.fixture
 def create_saved_project(
     project_repository: SqliteProjectRepository,
 ) -> Callable[..., Project]:
@@ -121,6 +134,32 @@ def create_saved_project(
 
 
 @pytest.fixture
+def saved_project(create_saved_project: Callable[..., Project]) -> Project:
+    return create_saved_project()
+
+
+@pytest.fixture
+def project_with_detected_sources(
+    create_saved_project: Callable[..., Project],
+) -> Project:
+    return create_saved_project(
+        detected_sources=[Source.CLAUDE_CODE, Source.DOT_AGENTS]
+    )
+
+
+@pytest.fixture
+def earlier_project(create_saved_project: Callable[..., Project]) -> Project:
+    return create_saved_project(path="/home/user/code/a", display_name="a")
+
+
+@pytest.fixture
+def later_project(
+    create_saved_project: Callable[..., Project], earlier_project: Project
+) -> Project:
+    return create_saved_project(path="/home/user/code/b", display_name="b")
+
+
+@pytest.fixture
 def create_consulted_layer() -> Callable[..., ConsultedLayer]:
     def _create_consulted_layer(*, rank: int = 1) -> ConsultedLayer:
         return ConsultedLayer(
@@ -133,3 +172,10 @@ def create_consulted_layer() -> Callable[..., ConsultedLayer]:
         )
 
     return _create_consulted_layer
+
+
+@pytest.fixture
+def consulted_layer(
+    create_consulted_layer: Callable[..., ConsultedLayer],
+) -> ConsultedLayer:
+    return create_consulted_layer()

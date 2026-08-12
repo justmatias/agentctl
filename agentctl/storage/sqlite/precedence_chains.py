@@ -7,12 +7,7 @@ from agentctl.utils import logger
 
 
 class SqlitePrecedenceChainRepository:
-    """Stores a cache row per (source, project_id); never the source of truth
-    (SPECS §9).
-
-    Not a `SqliteRepository`: it's keyed by (source, project_id) rather than
-    an id, and has `upsert` instead of `create`/`update`.
-    """
+    """Cache keyed by (source, project_id); never the source of truth (SPECS §9)."""
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -69,7 +64,6 @@ class SqlitePrecedenceChainRepository:
     @staticmethod
     def _row_to_model(row: sqlite3.Row) -> PrecedenceChain:
         return PrecedenceChain.model_validate({
-            "source": row["source"],
-            "project_id": row["project_id"],
+            **dict(row),
             "layers": json.loads(row["layers"]),
         })

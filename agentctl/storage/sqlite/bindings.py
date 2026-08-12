@@ -3,7 +3,7 @@ from uuid import UUID
 
 from agentctl.domain import Binding
 
-from .base import SqliteRepository
+from .repository import SqliteRepository
 
 
 class SqliteBindingRepository(SqliteRepository[Binding]):
@@ -65,14 +65,4 @@ class SqliteBindingRepository(SqliteRepository[Binding]):
 
     @staticmethod
     def _row_to_model(row: sqlite3.Row) -> Binding:
-        return Binding.model_validate({
-            "id": row["id"],
-            "extension_id": row["extension_id"],
-            "harness": row["harness"],
-            "scope": row["scope"],
-            "file_path": row["file_path"],
-            "enabled": bool(row["enabled"]),
-            "sync_state": row["sync_state"],
-            "last_written_hash": row["last_written_hash"],
-            "last_seen_hash": row["last_seen_hash"],
-        })
+        return Binding.model_validate({**dict(row), "enabled": bool(row["enabled"])})

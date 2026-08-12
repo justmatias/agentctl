@@ -3,7 +3,7 @@ import sqlite3
 
 from agentctl.domain import Conflict
 
-from .base import SqliteRepository
+from .repository import SqliteRepository
 
 
 class SqliteConflictRepository(SqliteRepository[Conflict]):
@@ -54,9 +54,6 @@ class SqliteConflictRepository(SqliteRepository[Conflict]):
     @staticmethod
     def _row_to_model(row: sqlite3.Row) -> Conflict:
         return Conflict.model_validate({
-            "id": row["id"],
-            "extension_id": row["extension_id"],
+            **dict(row),
             "binding_ids": json.loads(row["binding_ids"]),
-            "resolved_binding_id": row["resolved_binding_id"],
-            "resolution": row["resolution"],
         })

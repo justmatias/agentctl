@@ -1,5 +1,3 @@
-from collections.abc import Callable
-
 from agentctl.domain import Binding, Extension
 from agentctl.storage import SqliteBindingRepository
 from tests.factories import BindingFactory
@@ -19,27 +17,20 @@ def test_binding_create_and_get_round_trip(
 
 def test_binding_list_for_extension_filters(
     binding_repository: SqliteBindingRepository,
-    create_saved_extension: Callable[..., Extension],
-    create_saved_binding: Callable[..., Binding],
+    saved_extension: Extension,
+    saved_binding: Binding,
+    other_binding: Binding,
 ) -> None:
-    extension = create_saved_extension()
-    other_extension = create_saved_extension()
-    matching = create_saved_binding(extension_id=extension.id)
-    create_saved_binding(extension_id=other_extension.id)
+    result = binding_repository.list_for_extension(saved_extension.id)
 
-    result = binding_repository.list_for_extension(extension.id)
-
-    assert [b.id for b in result] == [matching.id]
+    assert [b.id for b in result] == [saved_binding.id]
 
 
 def test_binding_update_persists_changes(
     binding_repository: SqliteBindingRepository,
-    create_saved_binding: Callable[..., Binding],
-    saved_extension: Extension,
+    saved_binding: Binding,
 ) -> None:
-    binding = create_saved_binding(extension_id=saved_extension.id, enabled=True)
-
-    disabled = binding.model_copy(update={"enabled": False})
+    disabled = saved_binding.model_copy(update={"enabled": False})
     binding_repository.update(disabled)
 
-    assert binding_repository.get(binding.id) == disabled
+    assert binding_repository.get(saved_binding.id) == disabled

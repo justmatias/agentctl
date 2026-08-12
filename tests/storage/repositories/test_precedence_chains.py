@@ -10,9 +10,9 @@ from agentctl.storage import SqlitePrecedenceChainRepository
 
 def test_precedence_chain_upsert_and_get_global_chain(
     precedence_chain_repository: SqlitePrecedenceChainRepository,
-    create_consulted_layer: Callable[..., ConsultedLayer],
+    consulted_layer: ConsultedLayer,
 ) -> None:
-    chain = PrecedenceChain(source=Source.CLAUDE_CODE, layers=[create_consulted_layer()])
+    chain = PrecedenceChain(source=Source.CLAUDE_CODE, layers=[consulted_layer])
 
     precedence_chain_repository.upsert(chain)
 
@@ -21,13 +21,13 @@ def test_precedence_chain_upsert_and_get_global_chain(
 
 def test_precedence_chain_upsert_and_get_project_chain(
     precedence_chain_repository: SqlitePrecedenceChainRepository,
-    create_consulted_layer: Callable[..., ConsultedLayer],
+    consulted_layer: ConsultedLayer,
 ) -> None:
     project_id = uuid4()
     chain = PrecedenceChain(
         source=Source.CLAUDE_CODE,
         project_id=project_id,
-        layers=[create_consulted_layer()],
+        layers=[consulted_layer],
     )
 
     precedence_chain_repository.upsert(chain)
@@ -61,10 +61,10 @@ def test_precedence_chain_upsert_replaces_existing_row_for_same_key(
 
 def test_precedence_chain_delete_removes_row(
     precedence_chain_repository: SqlitePrecedenceChainRepository,
-    create_consulted_layer: Callable[..., ConsultedLayer],
+    consulted_layer: ConsultedLayer,
 ) -> None:
     precedence_chain_repository.upsert(
-        PrecedenceChain(source=Source.CLAUDE_CODE, layers=[create_consulted_layer()])
+        PrecedenceChain(source=Source.CLAUDE_CODE, layers=[consulted_layer])
     )
 
     precedence_chain_repository.delete(Source.CLAUDE_CODE, None)

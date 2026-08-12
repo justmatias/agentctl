@@ -3,13 +3,15 @@ import sqlite3
 
 from agentctl.domain import Extension
 
-from .base import SqliteRepository
+from .repository import SqliteRepository
 
 
 class SqliteExtensionRepository(SqliteRepository[Extension]):
     _table = "extensions"
     _entity_name = "extension"
-    _list_order_by = "created_at"
+
+    def list(self, *, order_by: str | None = None) -> list[Extension]:
+        return super().list(order_by=order_by or "created_at")
 
     def create(self, extension: Extension) -> None:
         self._write(
@@ -53,11 +55,6 @@ class SqliteExtensionRepository(SqliteRepository[Extension]):
     @staticmethod
     def _row_to_model(row: sqlite3.Row) -> Extension:
         return Extension.model_validate({
-            "id": row["id"],
-            "type": row["type"],
-            "name": row["name"],
-            "origin_harness": row["origin_harness"],
+            **dict(row),
             "canonical_config": json.loads(row["canonical_config"]),
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
         })

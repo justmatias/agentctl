@@ -3,13 +3,15 @@ import sqlite3
 
 from agentctl.domain import Project
 
-from .base import SqliteRepository
+from .repository import SqliteRepository
 
 
 class SqliteProjectRepository(SqliteRepository[Project]):
     _table = "projects"
     _entity_name = "project"
-    _list_order_by = "registered_at"
+
+    def list(self, *, order_by: str | None = None) -> list[Project]:
+        return super().list(order_by=order_by or "registered_at")
 
     def create(self, project: Project) -> None:
         self._write(
@@ -49,9 +51,6 @@ class SqliteProjectRepository(SqliteRepository[Project]):
     @staticmethod
     def _row_to_model(row: sqlite3.Row) -> Project:
         return Project.model_validate({
-            "id": row["id"],
-            "path": row["path"],
-            "display_name": row["display_name"],
-            "registered_at": row["registered_at"],
+            **dict(row),
             "detected_sources": json.loads(row["detected_sources"]),
         })

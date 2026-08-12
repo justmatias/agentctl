@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from uuid import uuid4
 
 from agentctl.domain import Extension
@@ -18,12 +17,13 @@ def test_shared_get_missing_returns_none(
 
 def test_shared_list_returns_all_created(
     extension_repository: SqliteExtensionRepository,
-    create_saved_extension: Callable[..., Extension],
+    saved_extension: Extension,
+    other_extension: Extension,
 ) -> None:
-    first = create_saved_extension(name="a")
-    second = create_saved_extension(name="b")
-
-    assert {e.id for e in extension_repository.list()} == {first.id, second.id}
+    assert {e.id for e in extension_repository.list()} == {
+        saved_extension.id,
+        other_extension.id,
+    }
 
 
 def test_shared_update_persists_changes(

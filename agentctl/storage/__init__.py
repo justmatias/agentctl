@@ -7,7 +7,7 @@ from .repositories import (
     PrecedenceChainRepository,
     ProjectRepository,
 )
-from .sqlite_repositories import (
+from .sqlite import (
     SqliteBindingRepository,
     SqliteConflictRepository,
     SqliteExtensionRepository,

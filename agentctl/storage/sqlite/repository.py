@@ -13,7 +13,6 @@ class SqliteRepository[T: BaseModel](ABC):
 
     _table: ClassVar[str]
     _entity_name: ClassVar[str]
-    _list_order_by: ClassVar[str | None] = None
 
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -24,10 +23,12 @@ class SqliteRepository[T: BaseModel](ABC):
         ).fetchone()
         return self._row_to_model(row) if row else None
 
-    def list(self) -> list[T]:
+    def list(self, *, order_by: str | None = None) -> list[T]:
+        # order_by is only ever a literal a subclass hardcodes (e.g. "created_at"),
+        # never a caller-supplied value, so interpolating it isn't an injection risk.
         query = f"SELECT * FROM {self._table}"
-        if self._list_order_by:
-            query += f" ORDER BY {self._list_order_by}"
+        if order_by:
+            query += f" ORDER BY {order_by}"
         rows = self._connection.execute(query).fetchall()
         return [self._row_to_model(row) for row in rows]
 
