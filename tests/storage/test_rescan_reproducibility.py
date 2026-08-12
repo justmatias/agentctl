@@ -1,5 +1,5 @@
+from collections.abc import Generator
 from pathlib import Path
-from typing import NamedTuple
 
 import pytest
 
@@ -21,50 +21,75 @@ from tests.factories import BindingFactory, ExtensionFactory
 # same on-disk state would find.
 
 
-class DiscoveredInventory(NamedTuple):
-    extension: Extension
-    binding: Binding
-    unbound_extension: Extension
+@pytest.fixture
+def seed_database(database_path: Path) -> Generator[Database]:
+    """A file-backed database the test closes explicitly mid-test (to delete
+    and reopen it); the `finally` here is a no-op safety net for that case.
+    """
+    database = Database(database_path)
+    try:
+        yield database
+    finally:
+        database.close()
 
 
 @pytest.fixture
-def discovered_inventory(
-    database_path: Path,
-    extension_factory: ExtensionFactory,
+def discovered_extension(
+    seed_database: Database, extension_factory: ExtensionFactory
+) -> Extension:
+    extension_repository = SqliteExtensionRepository(seed_database.connection)
+    extension = extension_factory.build(name="github")
+    extension_repository.create(extension)
+    return extension
+
+
+@pytest.fixture
+def discovered_binding(
+    seed_database: Database,
     binding_factory: BindingFactory,
-) -> DiscoveredInventory:
-    """Populate `database_path` as discovery of the on-disk state would: an
-    extension with a binding, an intentionally-kept conflict, and an
-    unbound extension. Closes the database before returning.
-    """
-    database = Database(database_path)
-    extension_repository = SqliteExtensionRepository(database.connection)
-    binding_repository = SqliteBindingRepository(database.connection)
-    conflict_repository = SqliteConflictRepository(database.connection)
+    discovered_extension: Extension,
+) -> Binding:
+    binding_repository = SqliteBindingRepository(seed_database.connection)
+    binding = binding_factory.build(extension_id=discovered_extension.id)
+    binding_repository.create(binding)
+    return binding
 
-    discovered_extension = extension_factory.build(name="github")
-    extension_repository.create(discovered_extension)
-    discovered_binding = binding_factory.build(extension_id=discovered_extension.id)
-    binding_repository.create(discovered_binding)
 
-    unbound_extension = extension_factory.build(name="orphaned")
-    extension_repository.create(unbound_extension)
+@pytest.fixture
+def unbound_extension(
+    seed_database: Database, extension_factory: ExtensionFactory
+) -> Extension:
+    extension_repository = SqliteExtensionRepository(seed_database.connection)
+    extension = extension_factory.build(name="orphaned")
+    extension_repository.create(extension)
+    return extension
 
-    conflict_repository.create(
-        Conflict(
-            extension_id=discovered_extension.id,
-            binding_ids=[discovered_binding.id],
-            resolution=ConflictResolution.KEEP_BOTH_INTENTIONALLY,
-        )
+
+@pytest.fixture
+def intentionally_kept_conflict(
+    seed_database: Database,
+    discovered_extension: Extension,
+    discovered_binding: Binding,
+) -> Conflict:
+    conflict_repository = SqliteConflictRepository(seed_database.connection)
+    conflict = Conflict(
+        extension_id=discovered_extension.id,
+        binding_ids=[discovered_binding.id],
+        resolution=ConflictResolution.KEEP_BOTH_INTENTIONALLY,
     )
-    database.close()
-    return DiscoveredInventory(discovered_extension, discovered_binding, unbound_extension)
+    conflict_repository.create(conflict)
+    return conflict
 
 
+@pytest.mark.usefixtures("intentionally_kept_conflict")
 def test_deleting_database_then_rescanning_only_loses_database_only_state(
-    database_path: Path, discovered_inventory: DiscoveredInventory
+    seed_database: Database,
+    database_path: Path,
+    discovered_extension: Extension,
+    discovered_binding: Binding,
+    unbound_extension: Extension,
 ) -> None:
-    extension, binding, unbound_extension = discovered_inventory
+    seed_database.close()
     database_path.unlink()
 
     rescanned = Database(database_path)
@@ -72,11 +97,11 @@ def test_deleting_database_then_rescanning_only_loses_database_only_state(
     rescanned_bindings = SqliteBindingRepository(rescanned.connection)
     rescanned_conflicts = SqliteConflictRepository(rescanned.connection)
 
-    rescanned_extensions.create(extension)
-    rescanned_bindings.create(binding)
+    rescanned_extensions.create(discovered_extension)
+    rescanned_bindings.create(discovered_binding)
 
-    assert rescanned_extensions.get(extension.id) == extension
-    assert rescanned_bindings.get(binding.id) == binding
+    assert rescanned_extensions.get(discovered_extension.id) == discovered_extension
+    assert rescanned_bindings.get(discovered_binding.id) == discovered_binding
 
     assert rescanned_extensions.get(unbound_extension.id) is None
     assert rescanned_conflicts.list() == []
