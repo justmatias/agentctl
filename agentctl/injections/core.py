@@ -7,6 +7,7 @@ import inject
 from agentctl.adapters import AdapterRegistry
 from agentctl.core import CoreService
 from agentctl.storage import Database
+from agentctl.utils import logger
 
 from .config import InjectionConfig
 
@@ -14,6 +15,8 @@ PRODUCTION_DB_PATH = Path.home() / ".agentctl" / "agentctl.db"
 
 
 def production_core_service() -> CoreService:
+    if not PRODUCTION_DB_PATH.parent.exists():
+        logger.info(f"Creating agentctl data directory at {PRODUCTION_DB_PATH.parent}")
     PRODUCTION_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     return CoreService(
         registry=AdapterRegistry(), database=Database(PRODUCTION_DB_PATH)

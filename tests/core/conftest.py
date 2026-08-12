@@ -7,8 +7,8 @@ from agentctl.storage import Database
 
 @pytest.fixture
 def database() -> Generator[Database]:
-    db = Database(":memory:")
+    database = Database(":memory:")
     try:
-        yield db
+        yield database
     finally:
-        db.close()
+        database.close()
