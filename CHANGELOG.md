@@ -1,6 +1,94 @@
 # CHANGELOG
 
 
+## v4.0.0 (2026-08-13)
+
+### Features
+
+- Breaking change detected [skip ci]
+  ([`b2fa9b4`](https://github.com/justmatias/agentctl/commit/b2fa9b47c4e9dfb7336d36aa1c02852fc0f12fbf))
+
+- **core**: Add core service skeleton and app/CLI wiring (#19)
+  ([#12](https://github.com/justmatias/agentctl/pull/12),
+  [`4314b1c`](https://github.com/justmatias/agentctl/commit/4314b1ccf0fda61803273db81bc0068f3120067f))
+
+* feat(core): add core service skeleton and app/CLI wiring
+
+CoreService (agentctl/core/service.py) is the framework-agnostic orchestration seam from SPECS.md
+  §9: it owns an AdapterRegistry and a Database, with just enough behavior (registered_sources) to
+  prove the wiring works. Detection logic — inventory, drift, conflicts — plugs in here starting
+  Phase 1.
+
+FastAPI app skeleton (agentctl/app.py) with a /health endpoint, wired to the existing
+  agentctl/injections/ DI pattern via a new CoreService binding (agentctl/injections/core.py);
+  production binds a real SQLite DB under ~/.agentctl/, tests bind an in-memory one.
+  agentctl/main.py now boots this app on 127.0.0.1:8000 via uvicorn instead of printing a
+  placeholder.
+
+CLI entry point (agentctl/cli.py, wired as the `agentctl` console script) scaffolds the full planned
+  surface — status, why, project add/list/remove, snapshot, restore, ui — as stubs behind a shared
+  --json flag; no real subcommand logic yet.
+
+Moves `inject` from dev-only to a real dependency (agentctl/injections now runs in production, not
+  just in tests) and switches setuptools to package auto-discovery, since an explicit single-package
+  list would have silently dropped every subpackage added since PR 0.1 from a real (non-editable)
+  install.
+
+ROADMAP.md PR 0.5.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+* fix(core): address automated review feedback
+
+- Bind CoreService with bind_to_constructor instead of bind_to_provider, so it's a lazy
+  process-lifetime singleton instead of re-running production_core_service()/test_core_service()
+  (and opening a fresh, never-closed sqlite3 connection, and resetting the AdapterRegistry) on every
+  inject.instance(CoreService) call. - CLI --json output now uses json.dumps instead of an f-string,
+  so command/path/key values containing a quote or backslash no longer produce invalid JSON. - Add
+  logging: CLI command dispatch and server startup. - Add a tests/core/conftest.py `database`
+  fixture (matching tests/storage/conftest.py's pattern, closing the connection in a finally)
+  instead of constructing Database(":memory:") inline and never closing it.
+
+* fix(core): apply code review findings on PR #12
+
+- Fix collection-breaking import: NullAdapter lives in agentctl.adapters.fake, not
+  agentctl.adapters.testing. - Flatten TestXxx test classes in test_app.py, test_cli.py, and
+  test_service.py into module-level functions, matching the no-test-classes convention applied
+  elsewhere in tests/. - Log directory creation in production_core_service() so first-run setup of
+  ~/.agentctl is visible in logs, matching other state-changing operations in the codebase. - Spell
+  out the abbreviated `db` local as `database` in the database fixture.
+
+* fix(injections): drop unused sample injection scaffold, hoist database fixture
+
+The sample.py DI scaffold was only ever a template for core.py and had no remaining callers. The
+  database fixture was duplicated across tests/core/conftest.py and tests/storage/conftest.py; hoist
+  it to the shared tests/conftest.py since both suites need it.
+
+* refactor(api): extract FastAPI app into api/ package with routers
+
+Move the app factory into agentctl/api/app.py and split the /health route into
+  agentctl/api/routers/health.py, mirrored by tests/api/ and tests/api/routers/. Drop the DI-wiring
+  assertions from the old tests/test_app.py — they duplicated coverage the app/router split doesn't
+  need — and move the shared TestClient and CliRunner setup out of test bodies into conftest
+  fixtures (api_client, cli_runner).
+
+* refactor(cli): inline not-yet-implemented stubs, drop helper indirection
+
+Replace the shared _not_yet_implemented() helper with a direct typer.echo() (json- or text-shaped
+  per --json) in each command body, and drop the incidental logger.info() call — these are stubs
+  with no real behavior yet, not state-changing ops worth logging.
+
+* fix(core): remove module docstrings, use absolute imports in api/app.py
+
+Address PR review feedback: drop the module docstrings added in this PR and replace the
+  parent-relative imports in api/app.py with absolute agentctl.* imports, keeping the single-dot
+  sibling import.
+
+---------
+
+Co-authored-by: Claude Sonnet 5 <noreply@anthropic.com>
+
+
 ## v3.1.0 (2026-08-12)
 
 ### Features
