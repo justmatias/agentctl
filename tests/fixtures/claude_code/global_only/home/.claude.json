@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "github-mcp": {
+      "command": "npx",
+      "args": ["-y", "github-mcp"]
+    }
+  },
+  "projects": {}
+}
