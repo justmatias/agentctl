@@ -1,9 +1,8 @@
-"""FastAPI app skeleton, bound to localhost by default (SPECS.md §9)."""
-
 from fastapi import FastAPI
 
-from .. import __version__
-from ..injections import InjectionConfig, clear_injections, setup_injections
+from agentctl import __version__
+from agentctl.injections import InjectionConfig, clear_injections, setup_injections
+
 from .routers import health_router
 
 

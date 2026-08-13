@@ -1,9 +1,3 @@
-"""CLI entry point: subcommand scaffolding only, no real behavior yet (ROADMAP.md PR 0.5).
-
-Surface matches SPECS.md §9 and the Phase-1 roadmap: `status`, `why`,
-`project add/list/remove`, `snapshot`, `restore`, `ui`.
-"""
-
 import json
 
 import typer

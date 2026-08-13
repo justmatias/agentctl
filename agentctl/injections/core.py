@@ -1,5 +1,3 @@
-"""DI bindings for CoreService."""
-
 from pathlib import Path
 
 import inject
