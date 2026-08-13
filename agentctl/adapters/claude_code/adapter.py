@@ -106,7 +106,7 @@ class ClaudeCodeAdapter:
             paths.extend(sorted(skills_directory.glob("*/SKILL.md")))
         return paths
 
-    def parse(self, path: Path) -> list[Extension]:
+    def parse(self, path: Path) -> list[Extension]:  # pylint: disable=no-self-use
         if not path.is_file():
             return []
         if path.name == "SKILL.md":
@@ -122,7 +122,7 @@ class ClaudeCodeAdapter:
 
     def serialize(self, extension: Extension) -> str:
         serializer = SERIALIZERS.get(type(extension.canonical_config))
-        if serializer is None:
+        if not serializer:  # pragma: no cover
             raise TypeError(
                 f"Unsupported canonical config type: {type(extension.canonical_config)!r}"
             )
