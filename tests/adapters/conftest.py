@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from agentctl.adapters import AdapterCapabilities
-from agentctl.adapters.claude_code import auto_memory_path
+from agentctl.adapters.claude_code import ClaudeCodeAdapter
 from agentctl.adapters.fake import NullAdapter
 from agentctl.domain import Source
 
@@ -55,7 +55,7 @@ def global_and_project_root(tmp_path: Path) -> Path:
     root = _copy_claude_code_fixture_scenario(tmp_path, "global_and_project")
     project_root = root / "project"
     home = root / "home"
-    user_auto_memory_path = auto_memory_path(home, project_root)
+    user_auto_memory_path = ClaudeCodeAdapter(home=home).auto_memory_path(project_root)
     user_auto_memory_path.parent.mkdir(parents=True)
     user_auto_memory_path.write_text(
         "# User auto-memory\n\n- Prefers tabs over spaces.\n"

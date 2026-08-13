@@ -3,11 +3,7 @@ from pathlib import Path
 import pytest
 
 from agentctl.adapters import SourceAdapter
-from agentctl.adapters.claude_code import (
-    ClaudeCodeAdapter,
-    _default_managed_settings_path,
-    auto_memory_path,
-)
+from agentctl.adapters.claude_code import ClaudeCodeAdapter
 from agentctl.adapters.protocol import MergeSemantics, WalkUpStop, WorkflowTargetForm
 from agentctl.domain import (
     ConsultedLayer,
@@ -70,7 +66,7 @@ def test_locate_project_config_finds_every_project_scope_file(
         project_root / ".claude" / "settings.local.json",
         project_root / "CLAUDE.md",
         project_root / ".claude" / "memory" / "MEMORY.md",
-        auto_memory_path(home, project_root),
+        adapter.auto_memory_path(project_root),
         project_root / ".claude" / "skills" / "example-skill" / "SKILL.md",
     }
 
@@ -151,7 +147,7 @@ def test_parse_extracts_user_scoped_auto_memory(global_and_project_root: Path) -
     home = global_and_project_root / "home"
     adapter = ClaudeCodeAdapter(home=home)
 
-    extensions = adapter.parse(auto_memory_path(home, project_root))
+    extensions = adapter.parse(adapter.auto_memory_path(project_root))
 
     assert len(extensions) == 1
     canonical = extensions[0].canonical_config
@@ -463,4 +459,4 @@ def test_default_managed_settings_path_is_operating_system_specific(
 ) -> None:
     monkeypatch.setattr("platform.system", lambda: operating_system)
 
-    assert _default_managed_settings_path() == Path(expected_path)
+    assert ClaudeCodeAdapter.default_managed_settings_path() == Path(expected_path)

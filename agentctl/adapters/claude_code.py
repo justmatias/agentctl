@@ -1,6 +1,7 @@
 import json
 import platform
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import yaml
@@ -30,55 +31,7 @@ from .protocol import (
     WorkflowTargetForm,
 )
 
-_SKILL_FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)", re.DOTALL)
-
-
-def slugify_project_path(project_root: Path) -> str:
-    """Best-effort match of the directory naming Claude Code uses under
-    `~/.claude/projects/<slug>/` for a project's auto-memory (SPECS.md §15).
-
-    Real Claude Code derives `<slug>` from the project's git repository root
-    so worktrees of the same repo share one memory directory; this adapter
-    has no git awareness and slugifies `project_root` itself instead, which
-    only matches for a plain (non-worktree) checkout.
-    """
-    return re.sub(r"[^A-Za-z0-9]", "-", str(project_root))
-
-
-def _default_managed_settings_path() -> Path:
-    system = platform.system()
-    if system == "Darwin":
-        return Path("/Library/Application Support/ClaudeCode/managed-settings.json")
-    if system == "Windows":
-        return Path(r"C:\Program Files\ClaudeCode\managed-settings.json")
-    return Path("/etc/claude-code/managed-settings.json")
-
-
-def auto_memory_path(home: Path, project_root: Path) -> Path:
-    """Where Claude Code stores a project's user-scoped auto-memory (SPECS.md §15)."""
-    return (
-        home
-        / ".claude"
-        / "projects"
-        / slugify_project_path(project_root)
-        / "memory"
-        / "MEMORY.md"
-    )
-
-
-def _mcp_server_to_dict(config: McpServerConfig) -> dict[str, object]:
-    data: dict[str, object] = {}
-    if config.command:
-        data["command"] = config.command
-    if config.args:
-        data["args"] = config.args
-    if config.env:
-        data["env"] = config.env
-    if config.url:
-        data["url"] = config.url
-    if config.headers:
-        data["headers"] = config.headers
-    return data
+SKILL_FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)", re.DOTALL)
 
 
 class ClaudeCodeAdapter:
@@ -100,7 +53,39 @@ class ClaudeCodeAdapter:
         self._managed_settings_path = (
             managed_settings_path
             if managed_settings_path is not None
-            else _default_managed_settings_path()
+            else self.default_managed_settings_path()
+        )
+
+    @staticmethod
+    def default_managed_settings_path() -> Path:
+        system = platform.system()
+        if system == "Darwin":
+            return Path("/Library/Application Support/ClaudeCode/managed-settings.json")
+        if system == "Windows":
+            return Path(r"C:\Program Files\ClaudeCode\managed-settings.json")
+        return Path("/etc/claude-code/managed-settings.json")
+
+    @staticmethod
+    def _slugify_project_path(project_root: Path) -> str:
+        """Best-effort match of the directory naming Claude Code uses under
+        `~/.claude/projects/<slug>/` for a project's auto-memory (SPECS.md §15).
+
+        Real Claude Code derives `<slug>` from the project's git repository root
+        so worktrees of the same repo share one memory directory; this adapter
+        has no git awareness and slugifies `project_root` itself instead, which
+        only matches for a plain (non-worktree) checkout.
+        """
+        return re.sub(r"[^A-Za-z0-9]", "-", str(project_root))
+
+    def auto_memory_path(self, project_root: Path) -> Path:
+        """Where Claude Code stores a project's user-scoped auto-memory (SPECS.md §15)."""
+        return (
+            self._home
+            / ".claude"
+            / "projects"
+            / self._slugify_project_path(project_root)
+            / "memory"
+            / "MEMORY.md"
         )
 
     def locate_global_config(self) -> list[Path]:
@@ -117,7 +102,7 @@ class ClaudeCodeAdapter:
             project_root / ".claude" / "settings.local.json",
             project_root / "CLAUDE.md",
             project_root / ".claude" / "memory" / "MEMORY.md",
-            auto_memory_path(self._home, project_root),
+            self.auto_memory_path(project_root),
         ]
         paths = [path for path in candidates if path.is_file()]
         skills_directory = project_root / ".claude" / "skills"
@@ -202,7 +187,7 @@ class ClaudeCodeAdapter:
     @staticmethod
     def _parse_skill(path: Path) -> list[Extension]:
         text = path.read_text(encoding="utf-8")
-        match = _SKILL_FRONTMATTER_PATTERN.match(text)
+        match = SKILL_FRONTMATTER_PATTERN.match(text)
         if not match:
             logger.warning(f"Skipping {path}: missing YAML frontmatter")
             return []
@@ -237,20 +222,40 @@ class ClaudeCodeAdapter:
         ]
 
     @staticmethod
-    def serialize(extension: Extension) -> str:
+    def _serialize_mcp_server(extension: Extension) -> str:
         config = extension.canonical_config
-        if isinstance(config, McpServerConfig):
-            payload = {"mcpServers": {extension.name: _mcp_server_to_dict(config)}}
-            return json.dumps(payload, indent=2)
-        if isinstance(config, MemoryFileConfig):
-            return config.content
-        if isinstance(config, SkillConfig):
-            frontmatter = yaml.safe_dump(
-                {"name": extension.name, "description": config.description},
-                sort_keys=False,
-            ).strip()
-            return f"---\n{frontmatter}\n---\n\n{config.body}\n"
-        raise TypeError(f"Unsupported canonical config type: {type(config)!r}")
+        assert isinstance(config, McpServerConfig)
+        server = config.model_dump(exclude={"type"}, exclude_defaults=True)
+        return json.dumps({"mcpServers": {extension.name: server}}, indent=2)
+
+    @staticmethod
+    def _serialize_memory_file(extension: Extension) -> str:
+        config = extension.canonical_config
+        assert isinstance(config, MemoryFileConfig)
+        return config.content
+
+    @staticmethod
+    def _serialize_skill(extension: Extension) -> str:
+        config = extension.canonical_config
+        assert isinstance(config, SkillConfig)
+        frontmatter = yaml.safe_dump(
+            {"name": extension.name, "description": config.description},
+            sort_keys=False,
+        ).strip()
+        return f"---\n{frontmatter}\n---\n\n{config.body}\n"
+
+    def serialize(self, extension: Extension) -> str:
+        serializers: dict[type, Callable[[Extension], str]] = {
+            McpServerConfig: self._serialize_mcp_server,
+            MemoryFileConfig: self._serialize_memory_file,
+            SkillConfig: self._serialize_skill,
+        }
+        serializer = serializers.get(type(extension.canonical_config))
+        if serializer is None:
+            raise TypeError(
+                f"Unsupported canonical config type: {type(extension.canonical_config)!r}"
+            )
+        return serializer(extension)
 
     @staticmethod
     def walk_up_behavior(extension_type: ExtensionType) -> WalkUpBehavior:
