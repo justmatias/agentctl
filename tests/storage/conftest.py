@@ -1,4 +1,4 @@
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -12,15 +12,6 @@ from agentctl.storage import (
     SqlitePrecedenceChainRepository,
     SqliteProjectRepository,
 )
-
-
-@pytest.fixture
-def database() -> Generator[Database]:
-    database = Database(":memory:")
-    try:
-        yield database
-    finally:
-        database.close()
 
 
 @pytest.fixture
