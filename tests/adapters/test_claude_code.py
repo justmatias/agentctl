@@ -293,33 +293,42 @@ def test_serialize_skill_round_trips_through_parse(tmp_path: Path) -> None:
     assert reparsed_canonical.body == "# Body\n\nDetails."
 
 
-def test_walk_up_behavior_for_memory_files_ascends_and_concatenates() -> None:
+@pytest.mark.parametrize(
+    ("extension_type", "expected_ascends", "expected_stops_at", "expected_merge_semantics"),
+    [
+        (
+            ExtensionType.MEMORY_FILE,
+            True,
+            WalkUpStop.FILESYSTEM_ROOT,
+            MergeSemantics.CONCATENATE,
+        ),
+        (
+            ExtensionType.MCP_SERVER,
+            False,
+            WalkUpStop.NONE,
+            MergeSemantics.OVERRIDE,
+        ),
+        (
+            ExtensionType.SKILL,
+            False,
+            WalkUpStop.NONE,
+            MergeSemantics.OVERRIDE,
+        ),
+    ],
+)
+def test_walk_up_behavior(
+    extension_type: ExtensionType,
+    expected_ascends: bool,
+    expected_stops_at: WalkUpStop,
+    expected_merge_semantics: MergeSemantics,
+) -> None:
     adapter = ClaudeCodeAdapter()
 
-    behavior = adapter.walk_up_behavior(ExtensionType.MEMORY_FILE)
+    behavior = adapter.walk_up_behavior(extension_type)
 
-    assert behavior.ascends is True
-    assert behavior.stops_at == WalkUpStop.FILESYSTEM_ROOT
-    assert behavior.merge_semantics == MergeSemantics.CONCATENATE
-
-
-def test_walk_up_behavior_for_mcp_servers_does_not_ascend() -> None:
-    adapter = ClaudeCodeAdapter()
-
-    behavior = adapter.walk_up_behavior(ExtensionType.MCP_SERVER)
-
-    assert behavior.ascends is False
-    assert behavior.stops_at == WalkUpStop.NONE
-    assert behavior.merge_semantics == MergeSemantics.OVERRIDE
-
-
-def test_walk_up_behavior_for_skills_does_not_ascend() -> None:
-    adapter = ClaudeCodeAdapter()
-
-    behavior = adapter.walk_up_behavior(ExtensionType.SKILL)
-
-    assert behavior.ascends is False
-    assert behavior.stops_at == WalkUpStop.NONE
+    assert behavior.ascends is expected_ascends
+    assert behavior.stops_at == expected_stops_at
+    assert behavior.merge_semantics == expected_merge_semantics
 
 
 def test_capabilities_declares_all_three_extension_types() -> None:

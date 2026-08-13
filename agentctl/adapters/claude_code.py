@@ -89,18 +89,29 @@ class ClaudeCodeAdapter:
             / "MEMORY.md"
         )
 
+    def _user_settings_path(self) -> Path:
+        return self._home / ".claude" / "settings.json"
+
+    @staticmethod
+    def _project_settings_path(project_root: Path) -> Path:
+        return project_root / ".claude" / "settings.json"
+
+    @staticmethod
+    def _local_settings_path(project_root: Path) -> Path:
+        return project_root / ".claude" / "settings.local.json"
+
     def locate_global_config(self) -> list[Path]:
         candidates = [
             self._home / ".claude.json",
-            self._home / ".claude" / "settings.json",
+            self._user_settings_path(),
             self._home / ".claude" / "CLAUDE.md",
         ]
         return [path for path in candidates if path.is_file()]
 
     def locate_project_config(self, project_root: Path) -> list[Path]:
         candidates = [
-            project_root / ".claude" / "settings.json",
-            project_root / ".claude" / "settings.local.json",
+            self._project_settings_path(project_root),
+            self._local_settings_path(project_root),
             project_root / "CLAUDE.md",
             project_root / ".claude" / "memory" / "MEMORY.md",
             self.auto_memory_path(project_root),
@@ -273,17 +284,27 @@ class ClaudeCodeAdapter:
             merge_semantics=MergeSemantics.OVERRIDE,
         )
 
+    @staticmethod
+    def _consulted_layer(
+        *, scope: Scope, path: Path, origin: LayerOrigin, order_rank: int
+    ) -> ConsultedLayer:
+        exists = path.is_file()
+        return ConsultedLayer(
+            scope=scope,
+            file_path=str(path),
+            exists=exists,
+            origin=origin,
+            order_rank=order_rank,
+            resolves=exists,
+        )
+
     def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
-        user_settings_path = self._home / ".claude" / "settings.json"
-        managed_settings_exists = self._managed_settings_path.is_file()
         layers: list[PrecedenceLayer] = [
-            ConsultedLayer(
+            self._consulted_layer(
                 scope=Scope.MANAGED,
-                file_path=str(self._managed_settings_path),
-                exists=managed_settings_exists,
+                path=self._managed_settings_path,
                 origin=LayerOrigin.GLOBAL,
                 order_rank=1,
-                resolves=managed_settings_exists,
             ),
             # Command-line arguments rank above every file-backed layer but are
             # never persisted on disk, so they can never resolve from a static
@@ -299,39 +320,28 @@ class ClaudeCodeAdapter:
             ),
         ]
         if project_root is not None:
-            local_settings_path = project_root / ".claude" / "settings.local.json"
-            project_settings_path = project_root / ".claude" / "settings.json"
-            local_settings_exists = local_settings_path.is_file()
-            project_settings_exists = project_settings_path.is_file()
             layers.append(
-                ConsultedLayer(
+                self._consulted_layer(
                     scope=Scope.LOCAL,
-                    file_path=str(local_settings_path),
-                    exists=local_settings_exists,
+                    path=self._local_settings_path(project_root),
                     origin=LayerOrigin.REGISTERED_PROJECT,
                     order_rank=3,
-                    resolves=local_settings_exists,
                 )
             )
             layers.append(
-                ConsultedLayer(
+                self._consulted_layer(
                     scope=Scope.PROJECT,
-                    file_path=str(project_settings_path),
-                    exists=project_settings_exists,
+                    path=self._project_settings_path(project_root),
                     origin=LayerOrigin.REGISTERED_PROJECT,
                     order_rank=4,
-                    resolves=project_settings_exists,
                 )
             )
-        user_settings_exists = user_settings_path.is_file()
         layers.append(
-            ConsultedLayer(
+            self._consulted_layer(
                 scope=Scope.USER,
-                file_path=str(user_settings_path),
-                exists=user_settings_exists,
+                path=self._user_settings_path(),
                 origin=LayerOrigin.GLOBAL,
                 order_rank=5,
-                resolves=user_settings_exists,
             )
         )
 
