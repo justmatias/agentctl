@@ -178,18 +178,17 @@ def test_parse_extracts_skill_with_frontmatter_and_bundled_files(
     assert canonical.bundled_files == ["reference.md"]
 
 
-def test_parse_malformed_claude_json_is_non_fatal(malformed_json_root: Path) -> None:
+@pytest.mark.parametrize(
+    "relative_path",
+    [Path(".claude.json"), Path(".claude") / "settings.json"],
+)
+def test_parse_malformed_json_is_non_fatal(
+    malformed_json_root: Path, relative_path: Path
+) -> None:
     home = malformed_json_root / "home"
     adapter = ClaudeCodeAdapter(home=home)
 
-    assert not adapter.parse(home / ".claude.json")
-
-
-def test_parse_malformed_settings_json_is_non_fatal(malformed_json_root: Path) -> None:
-    home = malformed_json_root / "home"
-    adapter = ClaudeCodeAdapter(home=home)
-
-    assert not adapter.parse(home / ".claude" / "settings.json")
+    assert not adapter.parse(home / relative_path)
 
 
 def test_parse_missing_file_is_non_fatal(tmp_path: Path) -> None:
@@ -198,25 +197,17 @@ def test_parse_missing_file_is_non_fatal(tmp_path: Path) -> None:
     assert not adapter.parse(tmp_path / "does-not-exist.json")
 
 
-def test_parse_skips_mcp_server_entry_missing_command_and_url(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"mcpServers": {"broken": {"args": ["--flag"]}}}',
+        '{"mcpServers": {"broken": "not-an-object"}}',
+        "[1, 2, 3]",
+    ],
+)
+def test_parse_skips_malformed_settings_content(tmp_path: Path, content: str) -> None:
     settings_path = tmp_path / "settings.json"
-    settings_path.write_text('{"mcpServers": {"broken": {"args": ["--flag"]}}}')
-    adapter = ClaudeCodeAdapter(home=tmp_path)
-
-    assert not adapter.parse(settings_path)
-
-
-def test_parse_skips_mcp_server_entry_that_is_not_an_object(tmp_path: Path) -> None:
-    settings_path = tmp_path / "settings.json"
-    settings_path.write_text('{"mcpServers": {"broken": "not-an-object"}}')
-    adapter = ClaudeCodeAdapter(home=tmp_path)
-
-    assert not adapter.parse(settings_path)
-
-
-def test_parse_json_file_that_is_not_an_object_is_non_fatal(tmp_path: Path) -> None:
-    settings_path = tmp_path / "settings.json"
-    settings_path.write_text("[1, 2, 3]")
+    settings_path.write_text(content)
     adapter = ClaudeCodeAdapter(home=tmp_path)
 
     assert not adapter.parse(settings_path)
@@ -230,62 +221,42 @@ def test_parse_unrecognized_file_type_returns_empty_list(tmp_path: Path) -> None
     assert not adapter.parse(unknown_path)
 
 
-def test_parse_skips_skill_missing_frontmatter(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "content",
+    [
+        "# No frontmatter here\n",
+        "---\nname: [unclosed\n---\nBody\n",
+        "---\n- just\n- a\n- list\n---\nBody\n",
+        "---\nname: broken-skill\ndescription: [not, a, string]\n---\nBody\n",
+    ],
+)
+def test_parse_skips_malformed_skill_content(tmp_path: Path, content: str) -> None:
     skill_path = tmp_path / "SKILL.md"
-    skill_path.write_text("# No frontmatter here\n")
+    skill_path.write_text(content)
     adapter = ClaudeCodeAdapter(home=tmp_path)
 
     assert not adapter.parse(skill_path)
 
 
-def test_parse_skips_skill_with_invalid_frontmatter_yaml(tmp_path: Path) -> None:
-    skill_path = tmp_path / "SKILL.md"
-    skill_path.write_text("---\nname: [unclosed\n---\nBody\n")
+@pytest.mark.parametrize(
+    ("name", "canonical"),
+    [
+        (
+            "remote-mcp",
+            McpServerConfig(
+                url="https://example.com/mcp",
+                env={"TOKEN": "secret"},
+                headers={"Authorization": "Bearer secret"},
+            ),
+        ),
+        ("some-mcp", McpServerConfig(command="npx", args=["-y", "some-mcp"])),
+    ],
+)
+def test_serialize_mcp_server_round_trips_through_parse(
+    tmp_path: Path, name: str, canonical: McpServerConfig
+) -> None:
     adapter = ClaudeCodeAdapter(home=tmp_path)
-
-    assert not adapter.parse(skill_path)
-
-
-def test_parse_skips_skill_with_non_mapping_frontmatter(tmp_path: Path) -> None:
-    skill_path = tmp_path / "SKILL.md"
-    skill_path.write_text("---\n- just\n- a\n- list\n---\nBody\n")
-    adapter = ClaudeCodeAdapter(home=tmp_path)
-
-    assert not adapter.parse(skill_path)
-
-
-def test_parse_skips_skill_with_invalid_shape(tmp_path: Path) -> None:
-    skill_path = tmp_path / "SKILL.md"
-    skill_path.write_text(
-        "---\nname: broken-skill\ndescription: [not, a, string]\n---\nBody\n"
-    )
-    adapter = ClaudeCodeAdapter(home=tmp_path)
-
-    assert not adapter.parse(skill_path)
-
-
-def test_serialize_remote_mcp_server_round_trips_through_parse(tmp_path: Path) -> None:
-    adapter = ClaudeCodeAdapter(home=tmp_path)
-    canonical = McpServerConfig(
-        url="https://example.com/mcp",
-        env={"TOKEN": "secret"},
-        headers={"Authorization": "Bearer secret"},
-    )
-    extension = Extension(name="remote-mcp", canonical_config=canonical)
-
-    rendered = adapter.serialize(extension)
-    settings_path = tmp_path / "settings.json"
-    settings_path.write_text(rendered)
-    reparsed = adapter.parse(settings_path)
-
-    assert len(reparsed) == 1
-    assert reparsed[0].canonical_config == canonical
-
-
-def test_serialize_mcp_server_round_trips_through_parse(tmp_path: Path) -> None:
-    adapter = ClaudeCodeAdapter(home=tmp_path)
-    canonical = McpServerConfig(command="npx", args=["-y", "some-mcp"])
-    extension = Extension(name="some-mcp", canonical_config=canonical)
+    extension = Extension(name=name, canonical_config=canonical)
 
     rendered = adapter.serialize(extension)
     settings_path = tmp_path / "settings.json"

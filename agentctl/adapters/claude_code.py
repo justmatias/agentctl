@@ -3,6 +3,7 @@ import platform
 import re
 from collections.abc import Callable
 from pathlib import Path
+from typing import ClassVar
 
 import yaml
 from pydantic import ValidationError
@@ -244,13 +245,14 @@ class ClaudeCodeAdapter:
         ).strip()
         return f"---\n{frontmatter}\n---\n\n{config.body}\n"
 
+    _SERIALIZERS: ClassVar[dict[type, Callable[[Extension], str]]] = {
+        McpServerConfig: _serialize_mcp_server,
+        MemoryFileConfig: _serialize_memory_file,
+        SkillConfig: _serialize_skill,
+    }
+
     def serialize(self, extension: Extension) -> str:
-        serializers: dict[type, Callable[[Extension], str]] = {
-            McpServerConfig: self._serialize_mcp_server,
-            MemoryFileConfig: self._serialize_memory_file,
-            SkillConfig: self._serialize_skill,
-        }
-        serializer = serializers.get(type(extension.canonical_config))
+        serializer = self._SERIALIZERS.get(type(extension.canonical_config))
         if serializer is None:
             raise TypeError(
                 f"Unsupported canonical config type: {type(extension.canonical_config)!r}"
@@ -273,14 +275,15 @@ class ClaudeCodeAdapter:
 
     def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
         user_settings_path = self._home / ".claude" / "settings.json"
+        managed_settings_exists = self._managed_settings_path.is_file()
         layers: list[PrecedenceLayer] = [
             ConsultedLayer(
                 scope=Scope.MANAGED,
                 file_path=str(self._managed_settings_path),
-                exists=self._managed_settings_path.is_file(),
+                exists=managed_settings_exists,
                 origin=LayerOrigin.GLOBAL,
                 order_rank=1,
-                resolves=self._managed_settings_path.is_file(),
+                resolves=managed_settings_exists,
             ),
             # Command-line arguments rank above every file-backed layer but are
             # never persisted on disk, so they can never resolve from a static
@@ -298,34 +301,37 @@ class ClaudeCodeAdapter:
         if project_root is not None:
             local_settings_path = project_root / ".claude" / "settings.local.json"
             project_settings_path = project_root / ".claude" / "settings.json"
+            local_settings_exists = local_settings_path.is_file()
+            project_settings_exists = project_settings_path.is_file()
             layers.append(
                 ConsultedLayer(
                     scope=Scope.LOCAL,
                     file_path=str(local_settings_path),
-                    exists=local_settings_path.is_file(),
+                    exists=local_settings_exists,
                     origin=LayerOrigin.REGISTERED_PROJECT,
                     order_rank=3,
-                    resolves=local_settings_path.is_file(),
+                    resolves=local_settings_exists,
                 )
             )
             layers.append(
                 ConsultedLayer(
                     scope=Scope.PROJECT,
                     file_path=str(project_settings_path),
-                    exists=project_settings_path.is_file(),
+                    exists=project_settings_exists,
                     origin=LayerOrigin.REGISTERED_PROJECT,
                     order_rank=4,
-                    resolves=project_settings_path.is_file(),
+                    resolves=project_settings_exists,
                 )
             )
+        user_settings_exists = user_settings_path.is_file()
         layers.append(
             ConsultedLayer(
                 scope=Scope.USER,
                 file_path=str(user_settings_path),
-                exists=user_settings_path.is_file(),
+                exists=user_settings_exists,
                 origin=LayerOrigin.GLOBAL,
                 order_rank=5,
-                resolves=user_settings_path.is_file(),
+                resolves=user_settings_exists,
             )
         )
 
