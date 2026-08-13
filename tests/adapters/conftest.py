@@ -20,7 +20,8 @@ from agentctl.domain import (
     Source,
 )
 
-_FIXTURES_DIRECTORY = Path(__file__).parent.parent / "fixtures"
+FIXTURES_DIRECTORY = Path(__file__).parent.parent / "fixtures"
+
 
 AdapterFactory = Callable[[Path], SourceAdapter]
 
@@ -34,37 +35,11 @@ ADAPTER_FACTORIES: dict[Source, AdapterFactory] = {
     ),
 }
 
-# One canonical config per extension type, so the contract suite can ask every
-# adapter to serialize each type it claims to support.
-_CANONICAL_CONFIGS: dict[ExtensionType, CanonicalConfig] = {
-    ExtensionType.MCP_SERVER: McpServerConfig(command="npx", args=["-y", "github-mcp"]),
-    ExtensionType.MEMORY_FILE: MemoryFileConfig(
-        content="# Project notes\n\n- Prefers tabs.\n", is_persistent_memory=False
-    ),
-    ExtensionType.SKILL: SkillConfig(
-        description="Formats the codebase.", body="Run the formatter, then the linter."
-    ),
-}
 
-
-class MismatchedSourceAdapter(NullAdapter):
-    """A NullAdapter whose declared capabilities.source disagrees with adapter.source."""
-
-    @property
-    def capabilities(self) -> AdapterCapabilities:
-        return AdapterCapabilities(
-            source=Source.CURSOR, extension_types=frozenset(), scopes=frozenset()
-        )
-
-
-@pytest.fixture
-def mismatched_source_adapter() -> NullAdapter:
-    return MismatchedSourceAdapter(Source.CLAUDE_CODE)
-
-
-@pytest.fixture
-def null_adapter() -> NullAdapter:
-    return NullAdapter(Source.CLAUDE_CODE)
+def copy_fixture_scenario(tmp_path: Path, source: Source, scenario_name: str) -> Path:
+    destination = tmp_path / scenario_name
+    shutil.copytree(FIXTURES_DIRECTORY / source.value / scenario_name, destination)
+    return destination
 
 
 @pytest.fixture(params=list(ADAPTER_FACTORIES), ids=lambda source: source.value)
@@ -73,6 +48,25 @@ def adapter(request: pytest.FixtureRequest, tmp_path: Path) -> SourceAdapter:
     home = tmp_path / "home"
     home.mkdir()
     return ADAPTER_FACTORIES[request.param](home)
+
+
+@pytest.fixture
+def mismatched_source_adapter() -> NullAdapter:
+    class MismatchedSourceAdapter(NullAdapter):
+        """A NullAdapter whose declared capabilities.source disagrees with adapter.source."""
+
+        @property
+        def capabilities(self) -> AdapterCapabilities:
+            return AdapterCapabilities(
+                source=Source.CURSOR, extension_types=frozenset(), scopes=frozenset()
+            )
+
+    return MismatchedSourceAdapter(Source.CLAUDE_CODE)
+
+
+@pytest.fixture
+def null_adapter() -> NullAdapter:
+    return NullAdapter(Source.CLAUDE_CODE)
 
 
 @pytest.fixture
@@ -85,7 +79,20 @@ def empty_project_root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def canonical_configs() -> dict[ExtensionType, CanonicalConfig]:
-    return _CANONICAL_CONFIGS
+    # One canonical config per extension type, so the contract suite can ask every
+    # adapter to serialize each type it claims to support.
+    return {
+        ExtensionType.MCP_SERVER: McpServerConfig(
+            command="npx", args=["-y", "github-mcp"]
+        ),
+        ExtensionType.MEMORY_FILE: MemoryFileConfig(
+            content="# Project notes\n\n- Prefers tabs.\n", is_persistent_memory=False
+        ),
+        ExtensionType.SKILL: SkillConfig(
+            description="Formats the codebase.",
+            body="Run the formatter, then the linter.",
+        ),
+    }
 
 
 @pytest.fixture(params=["global_view", "project_view"])
@@ -97,12 +104,6 @@ def precedence_chain(
     return adapter.precedence_chain(project_root)
 
 
-def _copy_fixture_scenario(tmp_path: Path, source: Source, scenario_name: str) -> Path:
-    destination = tmp_path / scenario_name
-    shutil.copytree(_FIXTURES_DIRECTORY / source.value / scenario_name, destination)
-    return destination
-
-
 @pytest.fixture
 def nothing_installed_root(tmp_path: Path) -> Path:
     """Neither a home nor a project directory has ever had Claude Code touch it."""
@@ -111,12 +112,12 @@ def nothing_installed_root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def global_only_root(tmp_path: Path) -> Path:
-    return _copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "global_only")
+    return copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "global_only")
 
 
 @pytest.fixture
 def global_and_project_root(tmp_path: Path) -> Path:
-    root = _copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "global_and_project")
+    root = copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "global_and_project")
     project_root = root / "project"
     home = root / "home"
     user_auto_memory_path = ClaudeCodeAdapter(home=home).auto_memory_path(project_root)
@@ -129,4 +130,4 @@ def global_and_project_root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def malformed_json_root(tmp_path: Path) -> Path:
-    return _copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "malformed_json")
+    return copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "malformed_json")
