@@ -61,6 +61,25 @@ class ClaudeCodeAdapter:
             return Path(r"C:\Program Files\ClaudeCode\managed-settings.json")
         return Path("/etc/claude-code/managed-settings.json")
 
+    @property
+    def capabilities(self) -> AdapterCapabilities:
+        return AdapterCapabilities(
+            source=Source.CLAUDE_CODE,
+            extension_types=frozenset({
+                ExtensionType.MCP_SERVER,
+                ExtensionType.MEMORY_FILE,
+                ExtensionType.SKILL,
+            }),
+            scopes=frozenset({
+                Scope.MANAGED,
+                Scope.LOCAL,
+                Scope.PROJECT,
+                Scope.USER,
+                Scope.GLOBAL,
+            }),
+            workflow_target_forms=frozenset({WorkflowTargetForm.SKILL}),
+        )
+
     @staticmethod
     def _slugify_project_path(project_root: Path) -> str:
         """Best-effort match of the directory naming Claude Code uses under
@@ -226,22 +245,3 @@ class ClaudeCodeAdapter:
             )
         )
         return PrecedenceChain(source=self.source, project_id=None, layers=layers)
-
-    @property
-    def capabilities(self) -> AdapterCapabilities:
-        return AdapterCapabilities(
-            source=Source.CLAUDE_CODE,
-            extension_types=frozenset({
-                ExtensionType.MCP_SERVER,
-                ExtensionType.MEMORY_FILE,
-                ExtensionType.SKILL,
-            }),
-            scopes=frozenset({
-                Scope.MANAGED,
-                Scope.LOCAL,
-                Scope.PROJECT,
-                Scope.USER,
-                Scope.GLOBAL,
-            }),
-            workflow_target_forms=frozenset({WorkflowTargetForm.SKILL}),
-        )
