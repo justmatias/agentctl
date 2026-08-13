@@ -17,7 +17,8 @@ from agentctl.utils import logger
 SKILL_FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)", re.DOTALL)
 
 
-def parse_json_config(path: Path) -> list[Extension]:
+def parse_mcp_servers_json(path: Path, *, source: Source) -> list[Extension]:
+    """Parse the `mcpServers` object shared by Claude Code and Cursor JSON config."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -50,30 +51,26 @@ def parse_json_config(path: Path) -> list[Extension]:
             )
             continue
         extensions.append(
-            Extension(
-                name=name,
-                origin_harness=Source.CLAUDE_CODE,
-                canonical_config=canonical,
-            )
+            Extension(name=name, origin_harness=source, canonical_config=canonical)
         )
     return extensions
 
 
-def parse_memory_file(path: Path, *, is_persistent_memory: bool) -> list[Extension]:
-    content = path.read_text(encoding="utf-8")
+def parse_memory_file(
+    path: Path, *, source: Source, is_persistent_memory: bool
+) -> list[Extension]:
+    """Parse a whole markdown memory/instruction file (CLAUDE.md, AGENTS.md, …)."""
     canonical = MemoryFileConfig(
-        content=content, is_persistent_memory=is_persistent_memory
+        content=path.read_text(encoding="utf-8"),
+        is_persistent_memory=is_persistent_memory,
     )
     return [
-        Extension(
-            name=path.name,
-            origin_harness=Source.CLAUDE_CODE,
-            canonical_config=canonical,
-        )
+        Extension(name=path.name, origin_harness=source, canonical_config=canonical)
     ]
 
 
-def parse_skill(path: Path) -> list[Extension]:
+def parse_skill(path: Path, *, source: Source) -> list[Extension]:
+    """Parse a SKILL.md-style skill: YAML frontmatter, body, and bundled siblings."""
     text = path.read_text(encoding="utf-8")
     match = SKILL_FRONTMATTER_PATTERN.match(text)
     if not match:
@@ -103,8 +100,4 @@ def parse_skill(path: Path) -> list[Extension]:
     except ValidationError as exc:
         logger.warning(f"Skipping {path}: invalid skill shape: {exc}")
         return []
-    return [
-        Extension(
-            name=name, origin_harness=Source.CLAUDE_CODE, canonical_config=canonical
-        )
-    ]
+    return [Extension(name=name, origin_harness=source, canonical_config=canonical)]

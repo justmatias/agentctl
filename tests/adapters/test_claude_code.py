@@ -2,9 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from agentctl.adapters import SourceAdapter
-from agentctl.adapters.claude_code import ClaudeCodeAdapter
-from agentctl.adapters.protocol import MergeSemantics, WalkUpStop, WorkflowTargetForm
+from agentctl.adapters import (
+    ClaudeCodeAdapter,
+    MergeSemantics,
+    SourceAdapter,
+    WalkUpStop,
+    WorkflowTargetForm,
+)
+from agentctl.adapters.claude_code import default_managed_settings_path
 from agentctl.domain import (
     ConsultedLayer,
     Extension,
@@ -294,7 +299,12 @@ def test_serialize_skill_round_trips_through_parse(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("extension_type", "expected_ascends", "expected_stops_at", "expected_merge_semantics"),
+    (
+        "extension_type",
+        "expected_ascends",
+        "expected_stops_at",
+        "expected_merge_semantics",
+    ),
     [
         (
             ExtensionType.MEMORY_FILE,
@@ -439,4 +449,4 @@ def test_default_managed_settings_path_is_operating_system_specific(
 ) -> None:
     monkeypatch.setattr("platform.system", lambda: operating_system)
 
-    assert ClaudeCodeAdapter.default_managed_settings_path() == Path(expected_path)
+    assert default_managed_settings_path() == Path(expected_path)

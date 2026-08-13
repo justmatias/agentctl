@@ -1,9 +1,16 @@
-import platform
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
+from agentctl.adapters.common import (
+    consulted_file_layer,
+    dispatch_serializer,
+    parse_mcp_servers_json,
+    parse_memory_file,
+    parse_skill,
+    platform_specific_path,
+)
 from agentctl.adapters.protocol import (
     AdapterCapabilities,
     MergeSemantics,
@@ -24,8 +31,15 @@ from agentctl.domain import (
 )
 from agentctl.utils import logger
 
-from .parsers import parse_json_config, parse_memory_file, parse_skill
 from .serializers import SERIALIZERS
+
+
+def default_managed_settings_path() -> Path:
+    return platform_specific_path(
+        darwin=Path("/Library/Application Support/ClaudeCode/managed-settings.json"),
+        windows=Path(r"C:\Program Files\ClaudeCode\managed-settings.json"),
+        default=Path("/etc/claude-code/managed-settings.json"),
+    )
 
 
 @dataclass(kw_only=True)
@@ -34,11 +48,7 @@ class ClaudeCodeAdapter:
 
     source: ClassVar[Source] = Source.CLAUDE_CODE
     home: Path = field(default_factory=Path.home)
-    managed_settings_path: Path | None = None
-
-    def __post_init__(self) -> None:
-        if not self.managed_settings_path:
-            self.managed_settings_path = self.default_managed_settings_path()
+    managed_settings_path: Path = field(default_factory=default_managed_settings_path)
 
     @property
     def user_settings_path(self) -> Path:
@@ -51,15 +61,6 @@ class ClaudeCodeAdapter:
     @staticmethod
     def local_settings_path(project_root: Path) -> Path:
         return project_root / ".claude" / "settings.local.json"
-
-    @staticmethod
-    def default_managed_settings_path() -> Path:
-        system = platform.system()
-        if system == "Darwin":
-            return Path("/Library/Application Support/ClaudeCode/managed-settings.json")
-        if system == "Windows":
-            return Path(r"C:\Program Files\ClaudeCode\managed-settings.json")
-        return Path("/etc/claude-code/managed-settings.json")
 
     @property
     def capabilities(self) -> AdapterCapabilities:
@@ -125,27 +126,24 @@ class ClaudeCodeAdapter:
             paths.extend(sorted(skills_directory.glob("*/SKILL.md")))
         return paths
 
-    def parse(self, path: Path) -> list[Extension]:  # pylint: disable=no-self-use
+    def parse(self, path: Path) -> list[Extension]:
         if not path.is_file():
             return []
         if path.name == "SKILL.md":
-            return parse_skill(path)
+            return parse_skill(path, source=self.source)
         if path.name in {"CLAUDE.md", "MEMORY.md"}:
             return parse_memory_file(
-                path, is_persistent_memory=path.name == "MEMORY.md"
+                path,
+                source=self.source,
+                is_persistent_memory=path.name == "MEMORY.md",
             )
         if path.suffix == ".json":
-            return parse_json_config(path)
+            return parse_mcp_servers_json(path, source=self.source)
         logger.warning(f"Claude Code adapter has no parser for {path}")
         return []
 
-    def serialize(self, extension: Extension) -> str:
-        serializer = SERIALIZERS.get(type(extension.canonical_config))
-        if not serializer:  # pragma: no cover
-            raise TypeError(
-                f"Unsupported canonical config type: {type(extension.canonical_config)!r}"
-            )
-        return serializer(extension)
+    def serialize(self, extension: Extension) -> str:  # pylint: disable=no-self-use
+        return dispatch_serializer(SERIALIZERS, extension)
 
     @staticmethod
     def walk_up_behavior(extension_type: ExtensionType) -> WalkUpBehavior:
@@ -162,15 +160,12 @@ class ClaudeCodeAdapter:
         )
 
     def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
-        managed_settings_exists = self.managed_settings_path.is_file()  # type: ignore[union-attr]
         layers: list[PrecedenceLayer] = [
-            ConsultedLayer(
+            consulted_file_layer(
                 scope=Scope.MANAGED,
-                file_path=str(self.managed_settings_path),
-                exists=managed_settings_exists,
+                path=self.managed_settings_path,
                 origin=LayerOrigin.GLOBAL,
                 order_rank=1,
-                resolves=managed_settings_exists,
             ),
             # Command-line arguments rank above every file-backed layer but are
             # never persisted on disk, so they can never resolve from a static
@@ -187,40 +182,29 @@ class ClaudeCodeAdapter:
         ]
 
         if project_root:
-            local_settings_path = self.local_settings_path(project_root)
-            local_settings_exists = local_settings_path.is_file()
             layers.append(
-                ConsultedLayer(
+                consulted_file_layer(
                     scope=Scope.LOCAL,
-                    file_path=str(local_settings_path),
-                    exists=local_settings_exists,
+                    path=self.local_settings_path(project_root),
                     origin=LayerOrigin.REGISTERED_PROJECT,
                     order_rank=3,
-                    resolves=local_settings_exists,
                 )
             )
-            project_settings_path = self.project_settings_path(project_root)
-            project_settings_exists = project_settings_path.is_file()
             layers.append(
-                ConsultedLayer(
+                consulted_file_layer(
                     scope=Scope.PROJECT,
-                    file_path=str(project_settings_path),
-                    exists=project_settings_exists,
+                    path=self.project_settings_path(project_root),
                     origin=LayerOrigin.REGISTERED_PROJECT,
                     order_rank=4,
-                    resolves=project_settings_exists,
                 )
             )
 
-        user_settings_exists = self.user_settings_path.is_file()
         layers.append(
-            ConsultedLayer(
+            consulted_file_layer(
                 scope=Scope.USER,
-                file_path=str(self.user_settings_path),
-                exists=user_settings_exists,
+                path=self.user_settings_path,
                 origin=LayerOrigin.GLOBAL,
                 order_rank=5,
-                resolves=user_settings_exists,
             )
         )
 

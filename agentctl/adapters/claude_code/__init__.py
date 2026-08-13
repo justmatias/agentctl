@@ -1,3 +1,3 @@
-from .adapter import ClaudeCodeAdapter
+from .adapter import ClaudeCodeAdapter, default_managed_settings_path
 
-__all__ = ["ClaudeCodeAdapter"]
+__all__ = ["ClaudeCodeAdapter", "default_managed_settings_path"]
