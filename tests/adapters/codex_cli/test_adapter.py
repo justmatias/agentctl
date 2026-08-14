@@ -290,7 +290,7 @@ def test_precedence_chain_ranks_every_layer_for_a_project(
         (Scope.USER, str(adapter.codex_home / "AGENTS.override.md")),
         (Scope.USER, str(adapter.codex_home / "AGENTS.md")),
     ]
-    assert [layer.order_rank for layer in chain.layers] == list(range(1, 10))
+    assert [layer.order_rank for layer in chain.layers] == list(range(1, 10))  # type: ignore[union-attr]
 
 
 def test_precedence_chain_tags_project_layers_with_their_origin(
@@ -312,7 +312,7 @@ def test_precedence_chain_omits_project_layers_for_the_global_view(
     chain = global_and_project_adapter.precedence_chain(None)
 
     assert Scope.PROJECT not in {layer.scope for layer in chain.layers}
-    assert [layer.order_rank for layer in chain.layers] == list(range(1, 7))
+    assert [layer.order_rank for layer in chain.layers] == list(range(1, 7))  # type: ignore[union-attr]
 
 
 def test_command_line_argument_layer_can_never_resolve(
@@ -325,7 +325,7 @@ def test_command_line_argument_layer_can_never_resolve(
     command_line_layer = next(
         layer for layer in chain.layers if layer.file_path == COMMAND_LINE_ARGUMENTS
     )
-    assert command_line_layer.order_rank == 2
+    assert command_line_layer.order_rank == 2  # type: ignore[union-attr]
     assert command_line_layer.exists is False
     assert command_line_layer.resolves is False
 
