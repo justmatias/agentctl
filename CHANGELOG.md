@@ -1,6 +1,80 @@
 # CHANGELOG
 
 
+## v5.0.0 (2026-08-14)
+
+### Features
+
+- Breaking change detected [skip ci]
+  ([`ebcf946`](https://github.com/justmatias/agentctl/commit/ebcf946f4046a4091438a373c5d5648ce6447cbf))
+
+- **adapters**: Add Claude Code adapter: read
+  ([#83](https://github.com/justmatias/agentctl/pull/83),
+  [`060941d`](https://github.com/justmatias/agentctl/commit/060941df18a537e090e3a29845e6f48503e75e54))
+
+* feat(adapters): add Claude Code adapter: read
+
+Implements ROADMAP.md PR 1.1: locates and parses ~/.claude.json, ~/.claude/settings.json,
+  .claude/settings.json, .claude/settings.local.json, CLAUDE.md (project + user), auto-memory
+  MEMORY.md, and .claude/skills/ into canonical Extension records; reports Claude Code's 5-layer
+  precedence chain (managed > CLI arg > local > project > user) with exists-per-layer; and reports
+  AGENTS.md as not_consulted, verified against current Claude Code docs rather than assumed.
+
+Closes #20.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+* fix(adapters): address review comments on Claude Code adapter
+
+- Serialize MCP servers via McpServerConfig.model_dump(exclude_defaults=True) instead of a
+  hand-rolled dict builder, removing _mcp_server_to_dict. - Move auto_memory_path,
+  default_managed_settings_path, and the project-path slugifier onto ClaudeCodeAdapter instead of
+  free module functions. - Rename _SKILL_FRONTMATTER_PATTERN to SKILL_FRONTMATTER_PATTERN. - Replace
+  serialize's isinstance if/elif chain with dict-based dispatch by canonical_config type.
+
+* refactor(adapters): simplify Claude Code adapter and its tests
+
+Dedupe repeated is_file() checks in precedence_chain, hoist the serializer dispatch table to a
+  class-level constant, and collapse near-identical malformed-input tests into parametrized cases.
+
+* chore(config): update pre-commit hooks
+
+* refactor(adapters): extract scope-path and consulted-layer helpers
+
+Give each Claude Code scope path (user/project/local settings) a single named source of truth shared
+  by locate_*_config and precedence_chain, and factor the repeated ConsultedLayer construction into
+  one helper. Also parametrize the three near-identical walk_up_behavior tests.
+
+* fix: refactor Claude Code adapter with parsing and serialization
+
+* fix: handle missing serializer in serialize method
+
+* chore: move capabilities property to the top
+
+* refactor: restructure adapters module
+
+* chore: add pytest-sugar to development dependencies and update coverage threshold
+
+* refactor: update fixture setup and remove unused code in conftest.py
+
+* chore: add initial tests for Claude Code adapter functionality
+
+* test: add comprehensive tests for Claude Code adapter functionality
+
+* chore: add pylint directive to suppress duplicate code warning
+
+---------
+
+Co-authored-by: Claude Sonnet 5 <noreply@anthropic.com>
+
+Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+
+### Refactoring
+
+- Remove redundant test_claude_code.py file
+  ([`84b255a`](https://github.com/justmatias/agentctl/commit/84b255a6e3d3d1770226dc7cbb29267a2929761b))
+
+
 ## v4.0.0 (2026-08-13)
 
 ### Features
