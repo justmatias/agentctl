@@ -1,4 +1,3 @@
-import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -7,6 +6,7 @@ import pytest
 from agentctl.adapters import (
     AdapterCapabilities,
     ClaudeCodeAdapter,
+    CodexCliAdapter,
     NullAdapter,
     SourceAdapter,
 )
@@ -20,26 +20,19 @@ from agentctl.domain import (
     Source,
 )
 
-FIXTURES_DIRECTORY = Path(__file__).parent.parent / "fixtures"
-
-
 AdapterFactory = Callable[[Path], SourceAdapter]
 
 # Every real adapter, built against a throwaway home directory so the contract
 # suite never reads the developer's own config. Registering a new adapter here
-# is all it takes for test_adapter_contract.py to hold it to the SourceAdapter
-# contract.
+# is all it takes for test_adapter.py to hold it to the SourceAdapter contract.
 ADAPTER_FACTORIES: dict[Source, AdapterFactory] = {
     Source.CLAUDE_CODE: lambda home: ClaudeCodeAdapter(
         home=home, managed_settings_path=home / "managed-settings.json"
     ),
+    Source.CODEX_CLI: lambda home: CodexCliAdapter(
+        codex_home=home / ".codex", system_config_directory=home / "system-config"
+    ),
 }
-
-
-def copy_fixture_scenario(tmp_path: Path, source: Source, scenario_name: str) -> Path:
-    destination = tmp_path / scenario_name
-    shutil.copytree(FIXTURES_DIRECTORY / source.value / scenario_name, destination)
-    return destination
 
 
 @pytest.fixture(params=list(ADAPTER_FACTORIES), ids=lambda source: source.value)
@@ -102,32 +95,3 @@ def precedence_chain(
     """The chain an adapter reports, in both the global and project-scoped views."""
     project_root = None if request.param == "global_view" else empty_project_root
     return adapter.precedence_chain(project_root)
-
-
-@pytest.fixture
-def nothing_installed_root(tmp_path: Path) -> Path:
-    """Neither a home nor a project directory has ever had Claude Code touch it."""
-    return tmp_path / "nothing_installed"
-
-
-@pytest.fixture
-def global_only_root(tmp_path: Path) -> Path:
-    return copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "global_only")
-
-
-@pytest.fixture
-def global_and_project_root(tmp_path: Path) -> Path:
-    root = copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "global_and_project")
-    project_root = root / "project"
-    home = root / "home"
-    user_auto_memory_path = ClaudeCodeAdapter(home=home).auto_memory_path(project_root)
-    user_auto_memory_path.parent.mkdir(parents=True)
-    user_auto_memory_path.write_text(
-        "# User auto-memory\n\n- Prefers tabs over spaces.\n"
-    )
-    return root
-
-
-@pytest.fixture
-def malformed_json_root(tmp_path: Path) -> Path:
-    return copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "malformed_json")

@@ -1,0 +1,5 @@
+[mcp_servers.project-mcp-server]
+url = "https://example.com/mcp"
+bearer_token_env_var = "EXAMPLE_MCP_TOKEN"
+http_headers = { "X-Example-Region" = "us-east-1" }
+enabled = true
