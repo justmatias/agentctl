@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 from .claude_code import ClaudeCodeAdapter
 from .common import (
     Serializer,
