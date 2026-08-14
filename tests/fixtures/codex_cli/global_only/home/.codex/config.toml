@@ -1,0 +1,24 @@
+# Personal Codex CLI configuration.
+model = "gpt-5-codex" # a trailing comment is not part of the value
+
+[mcp_servers.context7]
+command = "npx"
+# A '#' inside a quoted string opens no comment.
+args = ["-y", "@upstash/context7-mcp", "--tag=#latest"]
+startup_timeout_sec = 20 # a Codex-only knob the canonical shape has no room for
+
+# Nested table: Codex spells stdio environment variables as their own table.
+[mcp_servers.context7.env]
+CONTEXT7_API_KEY = "${CONTEXT7_API_KEY}"
+
+# Array of tables, unrelated to MCP servers.
+[[hooks.SessionStart]]
+matcher = "^compact$"
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "python3 ~/.codex/hooks/session_start.py"
+
+# Nested table under a quoted key that contains dots and separators.
+[projects."/home/dev/work/agentctl"]
+trust_level = "trusted"

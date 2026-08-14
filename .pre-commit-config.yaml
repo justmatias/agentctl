@@ -49,6 +49,7 @@ repos:
           - sqlmodel==0.0.39
           - pyyaml==6.0.3
           - types-pyyaml==6.0.12.20260724
+          - tomlkit==0.15.1
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.3.0
@@ -64,3 +65,4 @@ repos:
           - sqlmodel==0.0.39
           - pyyaml==6.0.3
           - types-pyyaml==6.0.12.20260724
+          - tomlkit==0.15.1
