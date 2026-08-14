@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "project-mcp-server": {
+      "url": "https://example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${TOKEN}"
+      }
+    }
+  }
+}

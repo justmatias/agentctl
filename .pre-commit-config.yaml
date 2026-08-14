@@ -17,7 +17,7 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 'v0.16.2'
+    rev: 'v0.16.3'
     hooks:
       - id: ruff-check
         name: ruff
@@ -47,6 +47,8 @@ repos:
           - polyfactory==3.3.0
           - sqlalchemy==2.0.52
           - sqlmodel==0.0.39
+          - pyyaml==6.0.3
+          - types-pyyaml==6.0.12.20260724
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.3.0
@@ -60,3 +62,5 @@ repos:
           - polyfactory==3.3.0
           - sqlalchemy==2.0.52
           - sqlmodel==0.0.39
+          - pyyaml==6.0.3
+          - types-pyyaml==6.0.12.20260724

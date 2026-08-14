@@ -67,7 +67,13 @@ class SourceAdapter(Protocol):
     of the tool never hardcodes harness-specific behavior.
     """
 
-    source: Source
+    @property
+    def source(self) -> Source:
+        """The source this adapter speaks for.
+
+        Declared read-only so an adapter can pin it as a `ClassVar` — it is
+        fixed per adapter class, never per instance.
+        """
 
     def locate_global_config(self) -> list[Path]:
         """Every global-scope config path this source actually has on disk."""

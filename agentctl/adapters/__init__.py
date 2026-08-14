@@ -1,3 +1,18 @@
+# pylint: disable=duplicate-code
+from .claude_code import ClaudeCodeAdapter
+from .common import (
+    Serializer,
+    consulted_file_layer,
+    dispatch_serializer,
+    parse_mcp_servers_json,
+    parse_memory_file,
+    parse_skill,
+    platform_specific_path,
+    serialize_mcp_server_json,
+    serialize_memory_file,
+    serialize_skill,
+)
+from .fake import NullAdapter
 from .protocol import (
     AdapterCapabilities,
     MergeSemantics,
@@ -11,9 +26,21 @@ from .registry import AdapterRegistry
 __all__ = [
     "AdapterCapabilities",
     "AdapterRegistry",
+    "ClaudeCodeAdapter",
     "MergeSemantics",
+    "NullAdapter",
+    "Serializer",
     "SourceAdapter",
     "WalkUpBehavior",
     "WalkUpStop",
     "WorkflowTargetForm",
+    "consulted_file_layer",
+    "dispatch_serializer",
+    "parse_mcp_servers_json",
+    "parse_memory_file",
+    "parse_skill",
+    "platform_specific_path",
+    "serialize_mcp_server_json",
+    "serialize_memory_file",
+    "serialize_skill",
 ]
