@@ -1,6 +1,41 @@
 # CHANGELOG
 
 
+## v7.0.0 (2026-08-21)
+
+### Chores
+
+- Align codebase with helix conventions ([#88](https://github.com/justmatias/agentctl/pull/88),
+  [`539bcd8`](https://github.com/justmatias/agentctl/commit/539bcd836acb3ad4af218ba09ef8071bed1ee65b))
+
+* chore: align codebase with Helix conventions
+
+- Remove module-level docstrings (no-module-docstrings) - Import re-exported symbols via package
+  __init__.py instead of reaching into sibling submodules directly
+  (import-via-package-init-reexports), reordering agentctl/adapters/__init__.py with an isort:off
+  block so .common/.protocol initialize before .claude_code needs them - Inline single-call-site
+  private helpers that only relocated a call without adding value (avoid-unnecessary-indirection)
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+* chore(config): update pre-commit hooks
+
+* chore: reorder imports in __init__.py
+
+* chore: refactor import statements to fix cyclic imports
+
+---------
+
+Co-authored-by: Claude Sonnet 5 <noreply@anthropic.com>
+
+Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+
+### Features
+
+- Breaking change detected [skip ci]
+  ([`9a90e4d`](https://github.com/justmatias/agentctl/commit/9a90e4d564c21e669dcec6619cdc879806559e15))
+
+
 ## v6.0.0 (2026-08-21)
 
 ### Chores
