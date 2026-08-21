@@ -3,18 +3,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from agentctl.adapters import (
-    AdapterCapabilities,
-    MergeSemantics,
-    WalkUpBehavior,
-    WalkUpStop,
-    WorkflowTargetForm,
+from agentctl.adapters.common import (
     consulted_file_layer,
     dispatch_serializer,
     parse_mcp_servers_json,
     parse_memory_file,
     parse_skill,
     platform_specific_path,
+)
+from agentctl.adapters.protocol import (
+    AdapterCapabilities,
+    MergeSemantics,
+    WalkUpBehavior,
+    WalkUpStop,
+    WorkflowTargetForm,
 )
 from agentctl.domain import (
     ConsultedLayer,

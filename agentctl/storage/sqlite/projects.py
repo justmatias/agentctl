@@ -1,5 +1,5 @@
 from agentctl.domain import Project
-from agentctl.storage import ProjectRow
+from agentctl.storage.schema import ProjectRow
 
 from .repository import SqliteRepository
 

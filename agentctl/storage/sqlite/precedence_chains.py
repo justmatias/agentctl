@@ -1,5 +1,5 @@
 from agentctl.domain import PrecedenceChain
-from agentctl.storage import PrecedenceChainRow
+from agentctl.storage.schema import PrecedenceChainRow
 
 from .repository import SqliteRepository
 

@@ -1,5 +1,5 @@
 from agentctl.domain import Binding
-from agentctl.storage import BindingRow
+from agentctl.storage.schema import BindingRow
 
 from .repository import SqliteRepository
 
