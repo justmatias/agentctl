@@ -1,5 +1,5 @@
 from agentctl.domain import Extension
-from agentctl.storage.schema import ExtensionRow
+from agentctl.storage import ExtensionRow
 
 from .repository import SqliteRepository
 

@@ -1,5 +1,8 @@
 # pylint: disable=duplicate-code
-from .claude_code import ClaudeCodeAdapter
+# isort: off
+# .common and .protocol must be imported before .claude_code: the latter
+# imports these re-exported names back from this package root, which would
+# otherwise hit a partial-initialization circular import.
 from .common import (
     Serializer,
     consulted_file_layer,
@@ -12,7 +15,6 @@ from .common import (
     serialize_memory_file,
     serialize_skill,
 )
-from .fake import NullAdapter
 from .protocol import (
     AdapterCapabilities,
     MergeSemantics,
@@ -21,7 +23,10 @@ from .protocol import (
     WalkUpStop,
     WorkflowTargetForm,
 )
+from .claude_code import ClaudeCodeAdapter
+from .fake import NullAdapter
 from .registry import AdapterRegistry
+# isort: on
 
 __all__ = [
     "AdapterCapabilities",

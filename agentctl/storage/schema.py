@@ -1,7 +1,3 @@
-"""SQLModel row definitions — the single source of truth for the on-disk
-schema, used by both `migrations.py` (DDL) and the repositories (DML).
-"""
-
 from typing import Any
 from uuid import uuid4
 

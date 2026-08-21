@@ -1,5 +1,5 @@
 from agentctl.domain import Conflict
-from agentctl.storage.schema import ConflictRow
+from agentctl.storage import ConflictRow
 
 from .repository import SqliteRepository
 
