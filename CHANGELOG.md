@@ -1,6 +1,98 @@
 # CHANGELOG
 
 
+## v6.0.0 (2026-08-21)
+
+### Chores
+
+- **config**: Autoupdate pre-commit hooks [skip ci]
+  ([`7f0f578`](https://github.com/justmatias/agentctl/commit/7f0f5783eb54c26eb8fe4f72e984c4477d132669))
+
+- **deps**: Bump uvicorn from 0.52.1 to 0.52.3
+  ([#87](https://github.com/justmatias/agentctl/pull/87),
+  [`b4bf22a`](https://github.com/justmatias/agentctl/commit/b4bf22ae9afda1b336613cc0285da6a41fc874b7))
+
+* chore(deps): bump uvicorn from 0.52.1 to 0.52.3
+
+Bumps [uvicorn](https://github.com/Kludex/uvicorn) from 0.52.1 to 0.52.3. - [Release
+  notes](https://github.com/Kludex/uvicorn/releases) -
+  [Changelog](https://github.com/Kludex/uvicorn/blob/main/docs/release-notes.md) -
+  [Commits](https://github.com/Kludex/uvicorn/compare/0.52.1...0.52.3)
+
+--- updated-dependencies: - dependency-name: uvicorn dependency-version: 0.52.3
+
+dependency-type: direct:production
+
+update-type: version-update:semver-patch ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+* chore(config): update pre-commit hooks
+
+---------
+
+Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
+
+Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+
+- **deps-dev**: Bump pre-commit from 4.6.1 to 4.6.2
+  ([#86](https://github.com/justmatias/agentctl/pull/86),
+  [`06a1ef8`](https://github.com/justmatias/agentctl/commit/06a1ef876656fdc89af1c6d956ad9c6382352c99))
+
+* chore(deps-dev): bump pre-commit from 4.6.1 to 4.6.2
+
+Bumps [pre-commit](https://github.com/pre-commit/pre-commit) from 4.6.1 to 4.6.2. - [Release
+  notes](https://github.com/pre-commit/pre-commit/releases) -
+  [Changelog](https://github.com/pre-commit/pre-commit/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/pre-commit/pre-commit/compare/v4.6.1...v4.6.2)
+
+--- updated-dependencies: - dependency-name: pre-commit dependency-version: 4.6.2
+
+dependency-type: direct:development
+
+update-type: version-update:semver-patch ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+* chore(config): update pre-commit hooks
+
+---------
+
+Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
+
+Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+
+- **deps-dev**: Update setuptools requirement from >=61.0 to >=84.0.0
+  ([#85](https://github.com/justmatias/agentctl/pull/85),
+  [`a1f95b5`](https://github.com/justmatias/agentctl/commit/a1f95b5cc79c683582f76086e63faa6d56d32ae9))
+
+* chore(deps-dev): update setuptools requirement from >=61.0 to >=84.0.0
+
+Updates the requirements on [setuptools](https://github.com/pypa/setuptools) to permit the latest
+  version. - [Release notes](https://github.com/pypa/setuptools/releases) -
+  [Changelog](https://github.com/pypa/setuptools/blob/main/NEWS.rst) -
+  [Commits](https://github.com/pypa/setuptools/compare/v61.0.0...v84.0.0)
+
+--- updated-dependencies: - dependency-name: setuptools dependency-version: 84.0.0
+
+dependency-type: direct:development ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+* chore(config): update pre-commit hooks
+
+---------
+
+Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
+
+Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+
+### Features
+
+- Breaking change detected [skip ci]
+  ([`3099fb4`](https://github.com/justmatias/agentctl/commit/3099fb4a3a7def613c92959fdbdacdd9097de0b2))
+
+
 ## v5.0.0 (2026-08-14)
 
 ### Features
