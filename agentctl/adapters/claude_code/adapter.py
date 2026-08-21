@@ -81,28 +81,15 @@ class ClaudeCodeAdapter:
             workflow_target_forms=frozenset({WorkflowTargetForm.SKILL}),
         )
 
-    @staticmethod
-    def _slugify_project_path(project_root: Path) -> str:
-        """Best-effort match of the directory naming Claude Code uses under
-        `~/.claude/projects/<slug>/` for a project's auto-memory.
-
-        Real Claude Code derives `<slug>` from the project's git repository root
-        so worktrees of the same repo share one memory directory; this adapter
-        has no git awareness and slugifies `project_root` itself instead, which
-        only matches for a plain (non-worktree) checkout.
-        """
-        return re.sub(r"[^A-Za-z0-9]", "-", str(project_root))
-
     def auto_memory_path(self, project_root: Path) -> Path:
         """Where Claude Code stores a project's user-scoped auto-memory (SPECS.md §15)."""
-        return (
-            self.home
-            / ".claude"
-            / "projects"
-            / self._slugify_project_path(project_root)
-            / "memory"
-            / "MEMORY.md"
-        )
+        # Real Claude Code derives the `<slug>` directory name from the project's
+        # git repository root so worktrees of the same repo share one memory
+        # directory; this adapter has no git awareness and slugifies
+        # `project_root` itself instead, which only matches for a plain
+        # (non-worktree) checkout.
+        slug = re.sub(r"[^A-Za-z0-9]", "-", str(project_root))
+        return self.home / ".claude" / "projects" / slug / "memory" / "MEMORY.md"
 
     def locate_global_config(self) -> list[Path]:
         candidates = [

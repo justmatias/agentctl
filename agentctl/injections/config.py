@@ -1,5 +1,3 @@
-"""Injection configuration enum."""
-
 from enum import Enum
 
 
