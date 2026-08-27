@@ -44,7 +44,7 @@ dev = [
   "pytest-recording>=0.13.4",
   "polyfactory>=2.14.0",
   "httpx>=0.27",
-  "types-pyyaml>=6.0.12.20260724",
+  "types-pyyaml>=6.0.12.20260815",
   "pytest-sugar>=1.1.1",
 ]
 
