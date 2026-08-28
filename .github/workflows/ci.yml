@@ -4,6 +4,7 @@ on:
   push:
     branches: ["main"]
   pull_request:
+    branches: ["main"]
     types: [opened, synchronize, reopened, edited]
 
 permissions:
@@ -17,57 +18,75 @@ jobs:
     name: Standardize PR title
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: read
     steps:
-      - name: Sync title with single commit and validate format
+      - name: Auto-generate conventional PR title
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CURRENT_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          COMMIT_COUNT=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json commits --jq '.commits | length')
-
-          if [ "$COMMIT_COUNT" -eq 1 ]; then
-            COMMIT_MSG=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json commits --jq '.commits[0].messageHeadline')
-            CURRENT_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
-            if [ "$CURRENT_TITLE" != "$COMMIT_MSG" ]; then
-              echo "Renaming PR title to match its single commit: $COMMIT_MSG"
-              gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$COMMIT_MSG"
-            fi
-            TITLE="$COMMIT_MSG"
+          PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+'
+          if echo "$CURRENT_TITLE" | grep -qE "$PATTERN"; then
+            echo "Title already conventional, skipping."
+            exit 0
+          fi
+          FIRST_COMMIT_SUBJECT=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --jq '.[0].commit.message' | head -1)
+          if echo "$FIRST_COMMIT_SUBJECT" | grep -qE "$PATTERN"; then
+            NEW_TITLE="$FIRST_COMMIT_SUBJECT"
           else
-            TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+            NEW_TITLE="chore: $FIRST_COMMIT_SUBJECT"
           fi
+          gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$NEW_TITLE"
 
-          echo "Validating PR title: $TITLE"
-          PATTERN='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._-]+\))?!?: .+'
-          if ! echo "$TITLE" | grep -qE "$PATTERN"; then
-            echo "::error::PR title '$TITLE' does not follow Conventional Commits format, e.g. 'feat(scope): add thing'."
-            exit 1
-          fi
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   lint:
-    name: Lint (Python 3.13)
+    name: Lint (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
         with:
           token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref || github.ref }}
           fetch-depth: 0
 
       - name: Setup environment
         uses: ./.github/actions/setup-python-env
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
 
       - name: Run lint and format checks
+        id: format
+        continue-on-error: true
         run: uv run poe format
 
+      - name: Commit autofixed formatting issues
+        if: steps.format.outcome == 'failure' && github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git diff --staged --quiet || git commit -m "style: apply automated formatting fixes"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
+
+      - name: Fail if lint or format issues were found
+        if: steps.format.outcome == 'failure'
+        run: exit 1
+
   test:
-    name: Test (Python 3.13)
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -77,7 +96,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-python-env
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
 
       - name: Run unit tests
         run: uv run poe test
@@ -148,6 +167,10 @@ jobs:
         with:
           python-version: "3.13"
 
+      # Use uvx rather than `pipx run`: pipx resolves the runner image's
+      # preinstalled uv from the tool cache instead of the version pinned by
+      # setup-python-env, and fails when that one is older than pipx requires.
+      # uvx always uses the pinned uv already on PATH.
       - name: Get proposed version
         id: proposed
         run: |
@@ -191,7 +214,7 @@ jobs:
 
       - name: Bump version and update changelog
         id: release
-        uses: python-semantic-release/python-semantic-release@v9.21.1
+        uses: python-semantic-release/python-semantic-release@v10.6.1
         with:
           github_token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
