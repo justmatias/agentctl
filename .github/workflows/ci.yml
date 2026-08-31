@@ -214,7 +214,7 @@ jobs:
 
       - name: Bump version and update changelog
         id: release
-        uses: python-semantic-release/python-semantic-release@v10.6.1
+        uses: python-semantic-release/python-semantic-release@v10.6.2
         with:
           github_token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
