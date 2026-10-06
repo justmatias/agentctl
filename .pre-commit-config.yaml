@@ -41,14 +41,14 @@ repos:
         types: [python]
         additional_dependencies:
           - loguru==0.7.3
-          - pydantic==2.13.4
+          - pydantic==2.13.5
           - pydantic-settings==2.15.0
           - pytest==9.1.1
           - polyfactory==3.3.0
           - sqlalchemy==2.0.52
-          - sqlmodel==0.0.39
+          - sqlmodel==0.0.42
           - pyyaml==6.0.3
-          - types-pyyaml==6.0.12.20260815
+          - types-pyyaml==6.0.12.20260906
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.4.0
@@ -56,11 +56,11 @@ repos:
       - id: mypy
         additional_dependencies:
           - loguru==0.7.3
-          - pydantic==2.13.4
+          - pydantic==2.13.5
           - pydantic-settings==2.15.0
           - pytest==9.1.1
           - polyfactory==3.3.0
           - sqlalchemy==2.0.52
-          - sqlmodel==0.0.39
+          - sqlmodel==0.0.42
           - pyyaml==6.0.3
-          - types-pyyaml==6.0.12.20260815
+          - types-pyyaml==6.0.12.20260906

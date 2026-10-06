@@ -169,21 +169,21 @@ class ClaudeCodeAdapter:
         ]
 
         if project_root:
-            layers.append(
-                consulted_file_layer(
-                    scope=Scope.LOCAL,
-                    path=self.local_settings_path(project_root),
-                    origin=LayerOrigin.REGISTERED_PROJECT,
-                    order_rank=3,
-                )
-            )
-            layers.append(
-                consulted_file_layer(
-                    scope=Scope.PROJECT,
-                    path=self.project_settings_path(project_root),
-                    origin=LayerOrigin.REGISTERED_PROJECT,
-                    order_rank=4,
-                )
+            layers.extend(
+                [
+                    consulted_file_layer(
+                        scope=Scope.LOCAL,
+                        path=self.local_settings_path(project_root),
+                        origin=LayerOrigin.REGISTERED_PROJECT,
+                        order_rank=3,
+                    ),
+                    consulted_file_layer(
+                        scope=Scope.PROJECT,
+                        path=self.project_settings_path(project_root),
+                        origin=LayerOrigin.REGISTERED_PROJECT,
+                        order_rank=4,
+                    ),
+                ]
             )
 
         layers.append(
