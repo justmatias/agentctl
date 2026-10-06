@@ -46,7 +46,7 @@ repos:
           - pytest==9.1.1
           - polyfactory==3.3.0
           - sqlalchemy==2.0.52
-          - sqlmodel==0.0.39
+          - sqlmodel==0.0.42
           - pyyaml==6.0.3
           - types-pyyaml==6.0.12.20260906
 
@@ -61,6 +61,6 @@ repos:
           - pytest==9.1.1
           - polyfactory==3.3.0
           - sqlalchemy==2.0.52
-          - sqlmodel==0.0.39
+          - sqlmodel==0.0.42
           - pyyaml==6.0.3
           - types-pyyaml==6.0.12.20260906
