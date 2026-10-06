@@ -22,7 +22,7 @@ dependencies = [
   "sqlmodel>=0.0.42",
   "fastapi>=0.115",
   "uvicorn>=0.52.4",
-  "typer>=0.15",
+  "typer>=0.27.2",
   "inject>=5.3.0",
 ]
 
