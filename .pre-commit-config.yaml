@@ -48,7 +48,7 @@ repos:
           - sqlalchemy==2.0.52
           - sqlmodel==0.0.39
           - pyyaml==6.0.3
-          - types-pyyaml==6.0.12.20260815
+          - types-pyyaml==6.0.12.20260906
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.4.0
@@ -63,4 +63,4 @@ repos:
           - sqlalchemy==2.0.52
           - sqlmodel==0.0.39
           - pyyaml==6.0.3
-          - types-pyyaml==6.0.12.20260815
+          - types-pyyaml==6.0.12.20260906

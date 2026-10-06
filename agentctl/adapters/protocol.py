@@ -1,19 +1,19 @@
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from agentctl.domain import Extension, ExtensionType, PrecedenceChain, Scope, Source
 
 
-class MergeSemantics(str, Enum):
+class MergeSemantics(StrEnum):
     """How a source combines multiple layers that define the same key."""
 
     OVERRIDE = "override"
     CONCATENATE = "concatenate"
 
 
-class WalkUpStop(str, Enum):
+class WalkUpStop(StrEnum):
     """Where a source's directory ascent for a given extension type stops."""
 
     GIT_ROOT = "git_root"
@@ -23,7 +23,7 @@ class WalkUpStop(str, Enum):
     """Does not ascend at all — only the given directory is consulted."""
 
 
-class WorkflowTargetForm(str, Enum):
+class WorkflowTargetForm(StrEnum):
     """Compilation targets a workflow can compile down to (SPECS §7.12.2)."""
 
     SKILL = "skill"
