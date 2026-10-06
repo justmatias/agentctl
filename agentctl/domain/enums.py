@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class ExtensionType(str, Enum):
+class ExtensionType(StrEnum):
     """Managed config object types with a canonical shape in v1"""
 
     MCP_SERVER = "mcp_server"
@@ -9,7 +9,7 @@ class ExtensionType(str, Enum):
     SKILL = "skill"
 
 
-class Source(str, Enum):
+class Source(StrEnum):
     """A harness, or a non-runnable shared source such as .agents"""
 
     CLAUDE_CODE = "claude_code"
@@ -19,7 +19,7 @@ class Source(str, Enum):
     DOT_AGENTS = "dot_agents"
 
 
-class Scope(str, Enum):
+class Scope(StrEnum):
     """Where a binding lives on disk relative to precedence"""
 
     MANAGED = "managed"
@@ -29,7 +29,7 @@ class Scope(str, Enum):
     GLOBAL = "global"
 
 
-class SyncState(str, Enum):
+class SyncState(StrEnum):
     """Whether a binding's on-disk content matches what the tool last wrote."""
 
     IN_SYNC = "in_sync"
@@ -39,7 +39,7 @@ class SyncState(str, Enum):
     UNMANAGED = "unmanaged"
 
 
-class LayerStatus(str, Enum):
+class LayerStatus(StrEnum):
     """Whether an adapter has verified a source is consulted"""
 
     CONSULTED = "consulted"
@@ -47,7 +47,7 @@ class LayerStatus(str, Enum):
     UNCONFIRMED = "unconfirmed"
 
 
-class LayerOrigin(str, Enum):
+class LayerOrigin(StrEnum):
     """Where a precedence layer's directory comes from"""
 
     REGISTERED_PROJECT = "registered_project"
@@ -55,7 +55,7 @@ class LayerOrigin(str, Enum):
     GLOBAL = "global"
 
 
-class ConflictResolution(str, Enum):
+class ConflictResolution(StrEnum):
     """How a structured-config Conflict was resolved"""
 
     UNRESOLVED = "unresolved"
