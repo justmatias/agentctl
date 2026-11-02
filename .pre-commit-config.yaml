@@ -17,7 +17,7 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 'v0.17.2'
+    rev: 'v0.17.3'
     hooks:
       - id: ruff-check
         name: ruff
@@ -51,7 +51,7 @@ repos:
           - types-pyyaml==6.0.12.20260906
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.4.0
+    rev: v2.4.1
     hooks:
       - id: mypy
         additional_dependencies:
