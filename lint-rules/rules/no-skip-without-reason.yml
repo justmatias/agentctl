@@ -1,0 +1,35 @@
+id: no-skip-without-reason
+language: Python
+severity: error
+message: Say why the test is skipped (reason="..."), so it can be revisited
+note: |
+  An unexplained skip or xfail is never revisited, and the test it hides stops
+  protecting anything.
+metadata:
+  source: .cursor/rules/testing.mdc
+rule:
+  any:
+    # @pytest.mark.skip and @pytest.mark.xfail without arguments.
+    - all:
+        - pattern: pytest.mark.$MARK
+        - not:
+            inside:
+              kind: call
+              field: function
+    # skip() and pytest.skip() with no reason at all.
+    - pattern: pytest.mark.skip()
+    - pattern: pytest.skip()
+    # xfail's first positional argument is the condition, so only reason= counts.
+    - all:
+        - pattern: pytest.mark.xfail($$$)
+        - not:
+            has:
+              kind: argument_list
+              has:
+                kind: keyword_argument
+                has:
+                  field: name
+                  regex: "^reason$"
+constraints:
+  MARK:
+    regex: "^(skip|xfail)$"

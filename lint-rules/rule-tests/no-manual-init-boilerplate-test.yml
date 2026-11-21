@@ -1,0 +1,49 @@
+id: no-manual-init-boilerplate
+valid:
+  - |
+    class User(BaseModel):
+        name: str
+        email: str
+  - |
+    class Service:
+        def __init__(self, client):
+            self.client = client
+
+        def fetch(self):
+            return self.client.get()
+  - |
+    class Counter:
+        def __init__(self, start):
+            self.value = start
+            self.history = []
+  - |
+    class NotFoundError(Exception):
+        def __init__(self, key):
+            self.key = key
+  - |
+    class Item:
+        def __init__(self, name):
+            self.name = name.strip()
+invalid:
+  # Same code as fixtures/invalid/python-models/manual_init.py
+  - |
+    class User:
+        def __init__(self, name, email):
+            self.name = name
+            self.email = email
+
+
+    class Item:
+        def __init__(self, name: str, quantity: int = 1) -> None:
+            self.name = name
+            self.quantity = quantity
+  - |
+    class User:
+        def __init__(self, name):
+            # keep the raw value
+            self.name = name
+  - |
+    class Item:
+        def __init__(self, name, quantity):
+            self.name = name
+            self.quantity = quantity

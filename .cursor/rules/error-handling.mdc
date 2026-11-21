@@ -1,0 +1,16 @@
+---
+description: Exception handling rules
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Error handling
+
+- Never use a bare `except:`. Always name the exception type you expect.
+- Never swallow an exception with `except Exception: pass`. Handle it, log it, or let it propagate.
+
+Why: a bare `except:` also catches `KeyboardInterrupt` and `SystemExit`, and a swallowed exception hides bugs until they surface far from their cause.
+
+## Checks
+- enforced-by: no-bare-except
+- enforced-by: no-swallowed-exception

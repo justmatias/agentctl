@@ -1,0 +1,16 @@
+id: no-broad-pytest-raises
+valid:
+  - |
+    with pytest.raises(ValueError):
+        parse("x")
+  # Near miss: an exception class whose name ends in Exception.
+  - |
+    with pytest.raises(ItemException, match="missing"):
+        load_item()
+invalid:
+  - |
+    with pytest.raises(Exception):
+        parse("x")
+  - |
+    with pytest.raises(BaseException, match="stop"):
+        run()

@@ -1,0 +1,14 @@
+id: no-broad-pytest-raises
+language: Python
+severity: error
+message: Name the exact exception (pytest.raises(ValueError)), not Exception or BaseException
+note: |
+  A broad pytest.raises passes on any error, including the TypeError or
+  AttributeError of a bug, so the test no longer checks what it claims.
+metadata:
+  source: .cursor/rules/testing.mdc
+rule:
+  pattern: pytest.raises($EXCEPTION $$$)
+constraints:
+  EXCEPTION:
+    regex: "^(Exception|BaseException)$"

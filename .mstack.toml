@@ -1,0 +1,10 @@
+# Where this repo keeps its rules and checks (written by `mstack init`). Every
+# `mstack` command reads this file; run `mstack config` to see the resolved values.
+rules_dir = ".cursor/rules"
+sgconfig = "lint-rules/sgconfig.yml"
+
+[scan]
+exclude = []
+
+[domain_check]
+paths = ["lint-rules", ".cursor/rules"]

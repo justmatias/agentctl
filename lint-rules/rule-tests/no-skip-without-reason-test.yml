@@ -1,0 +1,35 @@
+id: no-skip-without-reason
+valid:
+  - |
+    @pytest.mark.skip(reason="needs the staging environment")
+    def test_sync():
+        sync()
+  - |
+    @pytest.mark.xfail(sys.platform == "win32", reason="paths differ on Windows")
+    def test_paths():
+        check_paths()
+  # Near misses: a positional reason, and a skipped test that says why.
+  - |
+    @pytest.mark.skip("flaky upstream API")
+    def test_fetch():
+        fetch()
+  - |
+    def test_optional():
+        if not installed():
+            pytest.skip("the optional extra is not installed")
+invalid:
+  - |
+    @pytest.mark.skip
+    def test_sync():
+        sync()
+  - |
+    @pytest.mark.xfail
+    def test_paths():
+        check_paths()
+  - |
+    @pytest.mark.xfail(sys.platform == "win32")
+    def test_paths():
+        check_paths()
+  - |
+    def test_optional():
+        pytest.skip()

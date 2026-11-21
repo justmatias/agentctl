@@ -1,0 +1,36 @@
+id: no-sleep-in-tests
+language: Python
+severity: error
+message: Don't sleep in tests; wait for the condition you need, or inject a simulated clock
+note: |
+  A sleep makes the test slow, and still flaky when the machine is slower than
+  the guess. asyncio.sleep(0), which only yields to the event loop, is allowed.
+metadata:
+  source: .cursor/rules/testing.mdc
+files:
+  - "**/tests/**/*.py"
+  - "**/test_*.py"
+rule:
+  any:
+    - pattern: time.sleep($$$)
+    - all:
+        - pattern: asyncio.sleep($$$)
+        - not:
+            pattern: asyncio.sleep(0)
+    - all:
+        - pattern: sleep($$$)
+        - not:
+            pattern: sleep(0)
+        - inside:
+            kind: module
+            stopBy: end
+            has:
+              kind: import_from_statement
+              all:
+                - has:
+                    field: module_name
+                    regex: "^(time|asyncio)$"
+                # Any imported name: `has` with `field: name` only sees the first one.
+                - has:
+                    kind: dotted_name
+                    regex: "^sleep$"

@@ -1,0 +1,43 @@
+id: no-manual-init-boilerplate
+language: Python
+severity: warning
+message: Declare the fields on a pydantic.BaseModel (or a dataclass when required) instead of an __init__ that only copies its arguments
+note: |
+  Constructors that only assign self.x = x duplicate the field list
+  and drift out of sync with it. Applies to: classes whose only method is
+  __init__ and whose __init__ only assigns parameters to attributes.
+metadata:
+  source: .cursor/rules/python-models.mdc
+rule:
+  kind: class_definition
+  not:
+    has:
+      field: superclasses
+      regex: (Exception|Error)\b
+  has:
+    field: body
+    all:
+      - not:
+          has:
+            any:
+              - kind: decorated_definition
+              - kind: function_definition
+                not:
+                  has:
+                    field: name
+                    regex: ^__init__$
+      - has:
+          kind: function_definition
+          has:
+            field: body
+            all:
+              - has:
+                  kind: expression_statement
+              - not:
+                  has:
+                    not:
+                      any:
+                        - kind: comment
+                        - kind: expression_statement
+                          has:
+                            pattern: self.$NAME = $NAME
