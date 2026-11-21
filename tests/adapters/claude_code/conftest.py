@@ -8,7 +8,8 @@ from agentctl.adapters import (
     WalkUpBehavior,
     WalkUpStop,
 )
-from agentctl.domain import Extension, ExtensionType, McpServerConfig
+from agentctl.domain import Extension, ExtensionType, McpServerConfig, Source
+from tests.adapters.scenarios import copy_fixture_scenario
 
 MALFORMED_SETTINGS_CONTENT = {
     "mcp_server_without_command": '{"mcpServers": {"broken": {"args": ["--flag"]}}}',
@@ -53,6 +54,37 @@ EXPECTED_MANAGED_SETTINGS_PATHS = {
     "Windows": Path(r"C:\Program Files\ClaudeCode\managed-settings.json"),
     "Linux": Path("/etc/claude-code/managed-settings.json"),
 }
+
+
+@pytest.fixture
+def nothing_installed_root(tmp_path: Path) -> Path:
+    """Neither a home nor a project directory has ever had Claude Code touch it."""
+    return tmp_path / "nothing_installed"
+
+
+@pytest.fixture
+def global_only_root(tmp_path: Path) -> Path:
+    return copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "global_only")
+
+
+@pytest.fixture
+def global_and_project_root(tmp_path: Path) -> Path:
+    root = copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "global_and_project")
+    project_root = root / "project"
+    home = root / "home"
+    # The user-scoped auto-memory path is derived from the project's absolute
+    # path, which only exists once the scenario has been copied into tmp_path.
+    user_auto_memory_path = ClaudeCodeAdapter(home=home).auto_memory_path(project_root)
+    user_auto_memory_path.parent.mkdir(parents=True)
+    user_auto_memory_path.write_text(
+        "# User auto-memory\n\n- Prefers tabs over spaces.\n"
+    )
+    return root
+
+
+@pytest.fixture
+def malformed_json_root(tmp_path: Path) -> Path:
+    return copy_fixture_scenario(tmp_path, Source.CLAUDE_CODE, "malformed_json")
 
 
 @pytest.fixture
