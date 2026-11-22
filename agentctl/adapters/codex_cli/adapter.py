@@ -49,13 +49,12 @@ def default_codex_home() -> Path:
 
 
 def _project_directories(working_directory: Path) -> tuple[Path, ...]:
-    directories: list[Path] = []
     directory = working_directory.resolve()
-    for candidate in (directory, *directory.parents):
-        directories.append(candidate)
+    directories = (directory, *directory.parents)
+    for index, candidate in enumerate(directories):
         git_marker = candidate / ".git"
         if git_marker.is_file() or (git_marker / "HEAD").is_file():
-            return tuple(directories)
+            return directories[: index + 1]
     return (working_directory,)
 
 
