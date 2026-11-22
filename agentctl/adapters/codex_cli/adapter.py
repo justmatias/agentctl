@@ -168,25 +168,20 @@ class CodexCliAdapter:
         override_path = directory / INSTRUCTIONS_OVERRIDE_FILENAME
         base_path = directory / INSTRUCTIONS_FILENAME
         override_exists = override_path.is_file()
-        base_exists = base_path.is_file()
-        return [
-            ConsultedLayer(
-                scope=scope,
-                file_path=str(override_path),
-                exists=override_exists,
-                origin=origin,
-                order_rank=next(ranks),
-                resolves=override_exists,
-            ),
-            ConsultedLayer(
-                scope=scope,
-                file_path=str(base_path),
-                exists=base_exists,
-                origin=origin,
-                order_rank=next(ranks),
-                resolves=base_exists and not override_exists,
-            ),
-        ]
+        layers: list[PrecedenceLayer] = []
+        for path, is_shadowed in ((override_path, False), (base_path, override_exists)):
+            exists = path.is_file()
+            layers.append(
+                ConsultedLayer(
+                    scope=scope,
+                    file_path=str(path),
+                    exists=exists,
+                    origin=origin,
+                    order_rank=next(ranks),
+                    resolves=exists and not is_shadowed,
+                )
+            )
+        return layers
 
     def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
         """Codex's stack, highest precedence first: managed config, then CLI
