@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: justmatias/mstack@eac2ec1f42ca96083e65e38a43323dd1c9b52698
+      - uses: justmatias/mstack@690fb9d068ff735a47099d016823cdbbf0fb611f
 
   lint:
     name: Lint (Python ${{ matrix.python-version }})
