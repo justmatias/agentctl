@@ -222,3 +222,31 @@ def expected_managed_config_path(
         else adapter.system_config_directory
     )
     return directory / "managed_config.toml"
+
+
+@pytest.fixture(params=[False, True], ids=["repository", "worktree"])
+def nested_project_files(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> tuple[Path, list[Path]]:
+    git_root = tmp_path / "repo"
+    working_directory = git_root / "package" / "feature"
+    working_directory.mkdir(parents=True)
+    git_marker = git_root / ".git"
+    if request.param:
+        git_marker.write_text("gitdir: ../metadata/worktrees/repo\n")
+    else:
+        git_marker.mkdir()
+        (git_marker / "HEAD").write_text("ref: refs/heads/main\n")
+    (tmp_path / "AGENTS.md").touch()
+
+    files = [
+        working_directory / ".codex" / "config.toml",
+        git_root / ".codex" / "config.toml",
+        working_directory / "AGENTS.md",
+        working_directory.parent / "AGENTS.override.md",
+        git_root / "AGENTS.md",
+    ]
+    for path in files:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    return working_directory, files
