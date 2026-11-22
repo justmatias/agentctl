@@ -1,0 +1,102 @@
+name: Release prepare
+
+# Puts the release (version bump and changelog) into the PR itself, so merging
+# to main only lands what was reviewed. The bump level comes from the PR title,
+# because a squash merge turns the title into the commit on main.
+on:
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: release-prepare-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bump:
+    name: Bump version in the PR
+    runs-on: ubuntu-latest
+    # Fork PRs get a read-only token and cannot be pushed to.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: "3.13"
+          install-dependencies: "false"
+
+      - name: Work out the bump level from the PR title
+        id: level
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          breaking='^[a-z]+(\([^)]*\))?!:'
+          feature='^feat(\([^)]*\))?:'
+          fix='^(fix|perf)(\([^)]*\))?:'
+          if [[ "$PR_TITLE" =~ $breaking ]]; then
+            level="major"
+          elif [[ "$PR_TITLE" =~ $feature ]]; then
+            level="minor"
+          elif [[ "$PR_TITLE" =~ $fix ]]; then
+            level="patch"
+          else
+            level="none"
+          fi
+          echo "level=$level" >> "$GITHUB_OUTPUT"
+          echo "PR title '$PR_TITLE' -> bump level: $level"
+
+      # A previous run of this job left a release commit on the branch. Drop it
+      # so the bump is recomputed from the current title and never stacks.
+      - name: Drop the release commit from an earlier run
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          previous="$(git log --format=%H --author='github-actions\[bot\]' \
+            --grep='^chore(release): release version' \
+            "origin/${BASE_REF}..HEAD" | head -n 1)"
+          if [[ -n "$previous" ]]; then
+            git rebase --onto "${previous}^" "$previous"
+          fi
+
+      # semantic-release only releases from a branch matching its config, so
+      # the throwaway runner checkout is named main for the duration.
+      - name: Bump version and update changelog
+        if: steps.level.outputs.level != 'none'
+        env:
+          BUMP_LEVEL: ${{ steps.level.outputs.level }}
+          # The drop step above finds the release commit by this author.
+          GIT_COMMIT_AUTHOR: "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+        run: |
+          git checkout -B main
+          # The tag is made on main after merge, so this runs with --no-tag, and
+          # semantic-release only sets the commit_sha output when it tags. It
+          # then refuses to write its outputs, so give it nowhere to write them.
+          env -u GITHUB_OUTPUT uvx --from python-semantic-release==10.7.0 semantic-release version \
+            "--${BUMP_LEVEL}" --no-push --no-tag --no-vcs-release
+
+      - name: Push the release commit to the PR branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        # A rebuilt release commit gets a new sha even when nothing changed, and
+        # pushing it would start this workflow again, forever.
+        run: |
+          if git diff --quiet "origin/${HEAD_REF}" HEAD; then
+            echo "The PR branch already holds this release; nothing to push."
+            exit 0
+          fi
+          git push --force-with-lease origin "HEAD:refs/heads/${HEAD_REF}"
+          # A push made with GITHUB_TOKEN does not start the PR checks, so
+          # dispatch CI on the new head.
+          gh workflow run ci.yml --ref "${HEAD_REF}"
