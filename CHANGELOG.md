@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v16.1.1 (2026-11-22)
+
+### Bug Fixes
+
+- **adapters**: Report Codex project layers from Git ancestors
+  ([`ae877d2`](https://github.com/justmatias/agentctl/commit/ae877d2d7d1eaca53339a629c897483f9c9c3dc1))
+
+### Refactoring
+
+- **adapters**: Simplify the Codex directory walk
+  ([`e7b7576`](https://github.com/justmatias/agentctl/commit/e7b7576f013c5e788e74d19e86c944c6a80ea89e))
+
+
 ## v7.0.0 (2026-08-21)
 
 ### Chores

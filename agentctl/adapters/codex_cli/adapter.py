@@ -48,6 +48,16 @@ def default_codex_home() -> Path:
     return Path(override) if override else Path.home() / ".codex"
 
 
+def _project_directories(working_directory: Path) -> tuple[Path, ...]:
+    directory = working_directory.resolve()
+    directories = (directory, *directory.parents)
+    for index, candidate in enumerate(directories):
+        git_marker = candidate / ".git"
+        if git_marker.is_file() or (git_marker / "HEAD").is_file():
+            return directories[: index + 1]
+    return (working_directory,)
+
+
 @dataclass(kw_only=True)
 class CodexCliAdapter:
     """Reads Codex CLI's on-disk config into canonical `Extension` records"""
@@ -114,9 +124,13 @@ class CodexCliAdapter:
 
     def locate_project_config(self, project_root: Path) -> list[Path]:
         candidates = [
-            self.project_config_path(project_root),
-            project_root / INSTRUCTIONS_OVERRIDE_FILENAME,
-            project_root / INSTRUCTIONS_FILENAME,
+            path
+            for directory in _project_directories(project_root)
+            for path in (
+                self.project_config_path(directory),
+                directory / INSTRUCTIONS_OVERRIDE_FILENAME,
+                directory / INSTRUCTIONS_FILENAME,
+            )
         ]
         return [path for path in candidates if path.is_file()]
 
@@ -217,12 +231,17 @@ class CodexCliAdapter:
                 resolves=False,
             ),
         ]
-        if project_root is not None:
+        directories = _project_directories(project_root) if project_root is not None else ()
+        directory_origins = [
+            (directory, LayerOrigin.ANCESTOR_DIR if index else LayerOrigin.REGISTERED_PROJECT)
+            for index, directory in enumerate(directories)
+        ]
+        for directory, origin in directory_origins:
             layers.append(
                 consulted_file_layer(
                     scope=Scope.PROJECT,
-                    path=self.project_config_path(project_root),
-                    origin=LayerOrigin.REGISTERED_PROJECT,
+                    path=self.project_config_path(directory),
+                    origin=origin,
                     order_rank=next(ranks),
                 )
             )
@@ -242,12 +261,12 @@ class CodexCliAdapter:
                 ),
             ]
         )
-        if project_root is not None:
+        for directory, origin in directory_origins:
             layers.extend(
                 self._build_directory_instructions_layers(
-                    project_root,
+                    directory,
                     scope=Scope.PROJECT,
-                    origin=LayerOrigin.REGISTERED_PROJECT,
+                    origin=origin,
                     ranks=ranks,
                 )
             )

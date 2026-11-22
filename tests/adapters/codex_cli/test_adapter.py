@@ -407,3 +407,45 @@ def test_default_codex_home_falls_back_to_the_dot_codex_directory(
     monkeypatch.delenv("CODEX_HOME", raising=False)
 
     assert default_codex_home() == Path.home() / ".codex"
+
+
+def test_locate_project_config_stops_at_git_root_when_working_directory_is_nested(
+    adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
+) -> None:
+    working_directory, files = nested_project_files
+
+    assert set(adapter.locate_project_config(working_directory)) == set(files)
+
+
+def test_precedence_chain_lists_nearest_files_first_when_working_directory_is_nested(
+    adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
+) -> None:
+    working_directory, files = nested_project_files
+
+    chain = adapter.precedence_chain(working_directory)
+
+    assert [
+        Path(layer.file_path)
+        for layer in chain.layers
+        if layer.scope == Scope.PROJECT and layer.exists
+    ] == files
+
+
+def test_precedence_chain_tags_ancestor_layers_when_working_directory_is_nested(
+    adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
+) -> None:
+    working_directory, files = nested_project_files
+
+    chain = adapter.precedence_chain(working_directory)
+
+    assert {
+        Path(layer.file_path): layer.origin
+        for layer in chain.layers
+        if layer.scope == Scope.PROJECT and layer.exists
+    } == {
+        files[0]: LayerOrigin.REGISTERED_PROJECT,
+        files[1]: LayerOrigin.ANCESTOR_DIR,
+        files[2]: LayerOrigin.REGISTERED_PROJECT,
+        files[3]: LayerOrigin.ANCESTOR_DIR,
+        files[4]: LayerOrigin.ANCESTOR_DIR,
+    }
