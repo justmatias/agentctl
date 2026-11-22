@@ -11,42 +11,6 @@ from agentctl.adapters import (
 from agentctl.domain import Extension, ExtensionType, McpServerConfig, Source
 from tests.adapters.scenarios import copy_fixture_scenario
 
-SYSTEM_CONFIG_DIRECTORY_NAME = "system-config"
-
-MALFORMED_CONFIG_CONTENT = {
-    "mcp_server_without_command_or_url": '[mcp_servers.broken]\nargs = ["--flag"]\n',
-    "mcp_server_is_not_a_table": 'mcp_servers = { broken = "not-a-table" }\n',
-    "mcp_servers_is_not_a_table": 'mcp_servers = "not-a-table"\n',
-}
-
-MCP_SERVER_CONFIGS = {
-    "remote-mcp": McpServerConfig(
-        url="https://example.com/mcp",
-        env={"TOKEN": "secret"},
-        headers={"X-Example-Region": "us-east-1"},
-    ),
-    "some-mcp": McpServerConfig(command="npx", args=["-y", "some-mcp"]),
-}
-
-# Codex layers both config and instructions from the project root down to the
-# working directory, so every extension type ascends to the git root; only the
-# merge semantics differ.
-EXPECTED_WALK_UP_BEHAVIORS = {
-    ExtensionType.MEMORY_FILE: WalkUpBehavior(
-        ascends=True,
-        stops_at=WalkUpStop.GIT_ROOT,
-        merge_semantics=MergeSemantics.CONCATENATE,
-    ),
-    ExtensionType.MCP_SERVER: WalkUpBehavior(
-        ascends=True,
-        stops_at=WalkUpStop.GIT_ROOT,
-        merge_semantics=MergeSemantics.OVERRIDE,
-    ),
-}
-
-WINDOWS = "Windows"
-OPERATING_SYSTEMS = ["Darwin", WINDOWS, "Linux"]
-
 
 def codex_adapter_at(home: Path) -> CodexCliAdapter:
     """An adapter whose every machine-wide path stays inside `home`.
@@ -56,7 +20,7 @@ def codex_adapter_at(home: Path) -> CodexCliAdapter:
     """
     return CodexCliAdapter(
         codex_home=home / ".codex",
-        system_config_directory=home / SYSTEM_CONFIG_DIRECTORY_NAME,
+        system_config_directory=home / "system-config",
     )
 
 
@@ -117,11 +81,25 @@ def malformed_toml_adapter(malformed_toml_root: Path) -> CodexCliAdapter:
     return codex_adapter_at(malformed_toml_root / "home")
 
 
-@pytest.fixture(params=list(MALFORMED_CONFIG_CONTENT))
+@pytest.fixture(
+    params=[
+        pytest.param(
+            '[mcp_servers.broken]\nargs = ["--flag"]\n',
+            id="mcp_server_without_command_or_url",
+        ),
+        pytest.param(
+            'mcp_servers = { broken = "not-a-table" }\n',
+            id="mcp_server_is_not_a_table",
+        ),
+        pytest.param(
+            'mcp_servers = "not-a-table"\n', id="mcp_servers_is_not_a_table"
+        ),
+    ]
+)
 def malformed_config_path(request: pytest.FixtureRequest, tmp_path: Path) -> Path:
     """A config file whose TOML parses but whose shape the adapter must reject."""
     config_path = tmp_path / "config.toml"
-    config_path.write_text(MALFORMED_CONFIG_CONTENT[request.param])
+    config_path.write_text(request.param)
     return config_path
 
 
@@ -133,26 +111,71 @@ def _write_machine_wide_configs(adapter: CodexCliAdapter) -> None:
         path.write_text('approval_policy = "on-request"\n')
 
 
-@pytest.fixture(params=list(MCP_SERVER_CONFIGS))
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                "remote-mcp",
+                McpServerConfig(
+                    url="https://example.com/mcp",
+                    env={"TOKEN": "secret"},
+                    headers={"X-Example-Region": "us-east-1"},
+                ),
+            ),
+            id="remote-mcp",
+        ),
+        pytest.param(
+            ("some-mcp", McpServerConfig(command="npx", args=["-y", "some-mcp"])),
+            id="some-mcp",
+        ),
+    ]
+)
 def mcp_server_extension(request: pytest.FixtureRequest) -> Extension:
     """One MCP server extension per supported transport."""
-    return Extension(
-        name=request.param, canonical_config=MCP_SERVER_CONFIGS[request.param]
-    )
+    name, canonical_config = request.param
+    return Extension(name=name, canonical_config=canonical_config)
 
 
 @pytest.fixture(
-    params=list(EXPECTED_WALK_UP_BEHAVIORS),
-    ids=lambda extension_type: extension_type.value,
+    params=[
+        pytest.param(
+            (
+                ExtensionType.MEMORY_FILE,
+                WalkUpBehavior(
+                    ascends=True,
+                    stops_at=WalkUpStop.GIT_ROOT,
+                    merge_semantics=MergeSemantics.CONCATENATE,
+                ),
+            ),
+            id=ExtensionType.MEMORY_FILE.value,
+        ),
+        pytest.param(
+            (
+                ExtensionType.MCP_SERVER,
+                WalkUpBehavior(
+                    ascends=True,
+                    stops_at=WalkUpStop.GIT_ROOT,
+                    merge_semantics=MergeSemantics.OVERRIDE,
+                ),
+            ),
+            id=ExtensionType.MCP_SERVER.value,
+        ),
+    ]
 )
 def expected_walk_up_behavior(
     request: pytest.FixtureRequest,
 ) -> tuple[ExtensionType, WalkUpBehavior]:
-    """Each extension type paired with the walk-up contract Codex CLI declares."""
-    return request.param, EXPECTED_WALK_UP_BEHAVIORS[request.param]
+    """Each extension type paired with the walk-up contract Codex CLI declares.
+
+    Codex layers both config and instructions from the project root down to the
+    working directory, so every extension type ascends to the git root; only the
+    merge semantics differ.
+    """
+    extension_type, behavior = request.param
+    return extension_type, behavior
 
 
-@pytest.fixture(params=OPERATING_SYSTEMS)
+@pytest.fixture(params=["Darwin", "Windows", "Linux"])
 def expected_managed_config_path(
     request: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
@@ -166,7 +189,7 @@ def expected_managed_config_path(
     monkeypatch.setattr("platform.system", lambda: request.param)
     directory = (
         adapter.codex_home
-        if request.param == WINDOWS
+        if request.param == "Windows"
         else adapter.system_config_directory
     )
     return directory / "managed_config.toml"

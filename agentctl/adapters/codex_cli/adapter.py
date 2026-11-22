@@ -156,7 +156,7 @@ class CodexCliAdapter:
         )
 
     @staticmethod
-    def _instructions_layers(
+    def _build_directory_instructions_layers(
         directory: Path, *, scope: Scope, origin: LayerOrigin, ranks: Iterator[int]
     ) -> list[PrecedenceLayer]:
         """The `AGENTS.override.md` / `AGENTS.md` pair one directory contributes.
@@ -249,7 +249,7 @@ class CodexCliAdapter:
         )
         if project_root is not None:
             layers.extend(
-                self._instructions_layers(
+                self._build_directory_instructions_layers(
                     project_root,
                     scope=Scope.PROJECT,
                     origin=LayerOrigin.REGISTERED_PROJECT,
@@ -257,7 +257,7 @@ class CodexCliAdapter:
                 )
             )
         layers.extend(
-            self._instructions_layers(
+            self._build_directory_instructions_layers(
                 self.codex_home,
                 scope=Scope.USER,
                 origin=LayerOrigin.GLOBAL,

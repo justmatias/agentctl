@@ -1,6 +1,5 @@
 import json
 import re
-from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -20,17 +19,16 @@ from agentctl.utils import logger
 
 SKILL_FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)", re.DOTALL)
 
-McpServerBuilder = Callable[[Mapping[str, Any]], McpServerConfig]
 
-
-def _mcp_server_extensions(
-    servers: Any, *, path: Path, source: Source, build: McpServerBuilder
+def _parse_mcp_server_entries(
+    servers: Any, *, path: Path, source: Source, headers_key: str
 ) -> list[Extension]:
     """Turn a source's `name -> server entry` mapping into canonical Extensions.
 
-    Every source spells its MCP entries differently, so `build` owns the
-    per-source key names; the entry-shape validation and the "one bad entry
-    never sinks the file" contract are shared.
+    Sources spell their MCP entries the same way except for the key that holds
+    remote-transport headers, so `headers_key` is the only per-source input; the
+    entry-shape validation and the "one bad entry never sinks the file"
+    contract are shared.
     """
     if not isinstance(servers, dict):
         return []
@@ -40,7 +38,13 @@ def _mcp_server_extensions(
             logger.warning(f"Skipping malformed MCP server entry {name!r} in {path}")
             continue
         try:
-            canonical = build(entry)
+            canonical = McpServerConfig(
+                command=entry.get("command"),
+                args=entry.get("args", []),
+                env=entry.get("env", {}),
+                url=entry.get("url"),
+                headers=entry.get(headers_key, {}),
+            )
         except ValidationError as exc:
             logger.warning(
                 f"Skipping invalid MCP server entry {name!r} in {path}: {exc}"
@@ -50,28 +54,6 @@ def _mcp_server_extensions(
             Extension(name=name, origin_harness=source, canonical_config=canonical)
         )
     return extensions
-
-
-def _json_mcp_server(entry: Mapping[str, Any]) -> McpServerConfig:
-    return McpServerConfig(
-        command=entry.get("command"),
-        args=entry.get("args", []),
-        env=entry.get("env", {}),
-        url=entry.get("url"),
-        headers=entry.get("headers", {}),
-    )
-
-
-def _toml_mcp_server(entry: Mapping[str, Any]) -> McpServerConfig:
-    # Codex names its remote-transport headers `http_headers`; everything else
-    # matches the canonical field names.
-    return McpServerConfig(
-        command=entry.get("command"),
-        args=entry.get("args", []),
-        env=entry.get("env", {}),
-        url=entry.get("url"),
-        headers=entry.get("http_headers", {}),
-    )
 
 
 def parse_mcp_servers_json(path: Path, *, source: Source) -> list[Extension]:
@@ -86,8 +68,8 @@ def parse_mcp_servers_json(path: Path, *, source: Source) -> list[Extension]:
             f"Skipping {path}: expected a JSON object, got {type(data).__name__}"
         )
         return []
-    return _mcp_server_extensions(
-        data.get("mcpServers"), path=path, source=source, build=_json_mcp_server
+    return _parse_mcp_server_entries(
+        data.get("mcpServers"), path=path, source=source, headers_key="headers"
     )
 
 
@@ -104,11 +86,12 @@ def parse_mcp_servers_toml(path: Path, *, source: Source) -> list[Extension]:
     except TOMLKitError as exc:
         logger.warning(f"Skipping malformed TOML in {path}: {exc}")
         return []
-    return _mcp_server_extensions(
+    # Codex names its remote-transport headers `http_headers`.
+    return _parse_mcp_server_entries(
         document.unwrap().get("mcp_servers"),
         path=path,
         source=source,
-        build=_toml_mcp_server,
+        headers_key="http_headers",
     )
 
 
