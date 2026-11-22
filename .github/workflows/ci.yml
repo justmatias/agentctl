@@ -43,6 +43,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  mstack:
+    name: mstack lint
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: justmatias/mstack@690fb9d068ff735a47099d016823cdbbf0fb611f
+
   lint:
     name: Lint (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
