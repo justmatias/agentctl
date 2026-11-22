@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: ["main"]
+  workflow_dispatch:
   pull_request:
     branches: ["main"]
     types: [opened, synchronize, reopened, edited]
@@ -159,75 +160,135 @@ jobs:
           git diff --staged --quiet || git commit -m "chore(config): update pre-commit hooks"
           git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
 
-  breaking-changes:
-    name: Detect breaking changes
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: [lint, test]
+  prepare-release:
+    name: Prepare release in PR
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [pr-title, lint, update-hooks]
     permissions:
+      actions: write
       contents: write
+      pull-requests: read
+    concurrency:
+      group: prepare-release-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-          ref: main
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - name: Setup environment
         uses: ./.github/actions/setup-python-env
         with:
           python-version: "3.13"
+          install-dependencies: "false"
 
-      # Use uvx rather than `pipx run`: pipx resolves the runner image's
-      # preinstalled uv from the tool cache instead of the version pinned by
-      # setup-python-env, and fails when that one is older than pipx requires.
-      # uvx always uses the pinned uv already on PATH.
-      - name: Get proposed version
-        id: proposed
+      - name: Update version and changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          VERSION=$(uvx --from python-semantic-release semantic-release --noop version --print)
-          echo "proposed=$VERSION" >> $GITHUB_OUTPUT
+          pr=$(gh pr view "$PR_NUMBER" --json headRefOid,title --jq '[.headRefOid,.title] | @tsv')
+          IFS=$'\t' read -r head title <<< "$pr"
+          if [[ "$head" != "$(git rev-parse HEAD)" ]]; then
+            exit 0
+          fi
 
-      - name: Run pycracks
-        id: pycracks
-        continue-on-error: true
-        run: |
-          uvx pycracks \
-            --path "tests" \
-            --target-version "${{ steps.proposed.outputs.proposed }}" \
-            --test-command "uv run poe test"
+          breaking='^[a-z]+(\([^)]*\))?!:'
+          feature='^feat(\([^)]*\))?:'
+          fix='^(fix|perf)(\([^)]*\))?:'
+          level=
+          if [[ "$title" =~ $breaking ]]; then
+            level=major
+          elif [[ "$title" =~ $feature ]]; then
+            level=minor
+          elif [[ "$title" =~ $fix ]]; then
+            level=patch
+          fi
 
-      - name: Create breaking change commit
-        if: steps.pycracks.outcome == 'failure'
-        run: |
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          git commit --allow-empty \
-            -m "feat!: breaking change detected [skip ci]"
-          git push origin main
+          base=$(git merge-base "origin/$BASE_REF" HEAD)
+          previous=$(git log --format=%H --author='github-actions\[bot\]' \
+            --grep='^chore(release): prepare PR version$' "$base..HEAD")
+          if [[ -z "$level" && -z "$previous" ]]; then
+            exit 0
+          fi
+
+          release_files=(agentctl/__init__.py CHANGELOG.md)
+          if [[ -n "$previous" ]]; then
+            # Reverse only previous bot changes, preserving edits made by contributors.
+            mapfile -t release_commits <<< "$previous"
+            git revert --no-commit "${release_commits[@]}"
+            git revert --quit
+          fi
+          if [[ -n "$level" ]]; then
+            if ! git diff --quiet "$base" "origin/$BASE_REF" -- "${release_files[@]}"; then
+              echo "::error::Update the PR branch from $BASE_REF before preparing a release."
+              exit 1
+            fi
+            # Wait for the preceding release to be tagged before calculating the next bump.
+            version=$(git show "$base:agentctl/__init__.py" | cut -d '"' -f 2)
+            if ! git merge-base --is-ancestor "refs/tags/v$version" "$base" 2>/dev/null; then
+              echo "::error::The base version v$version must be tagged before preparing a release."
+              exit 1
+            fi
+            git switch -C main
+            env -u GITHUB_OUTPUT uvx --from python-semantic-release==10.7.0 semantic-release version \
+              "--$level" --no-commit --no-tag --no-push --no-vcs-release
+          fi
+
+          git add -- "${release_files[@]}"
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='github-actions[bot]@users.noreply.github.com' \
+              commit -m "chore(release): prepare PR version"
+            git push origin "HEAD:refs/heads/$HEAD_REF"
+          elif [[ "${GITHUB_RUN_ATTEMPT:-1}" == 1 || -z "$previous" ]]; then
+            exit 0
+          fi
+          # Dispatch CI because a GITHUB_TOKEN push may require approval to run PR checks.
+          gh workflow run ci.yml --ref "$HEAD_REF"
 
   versioning:
     name: Versioning
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: [breaking-changes]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [mstack, lint, test, security]
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      queue: max
     steps:
       - uses: actions/checkout@v7
         with:
-          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-          ref: main
           fetch-depth: 0
 
-      - name: Setup environment
-        uses: ./.github/actions/setup-python-env
-        with:
-          python-version: "3.13"
-
-      - name: Bump version and update changelog
+      - name: Tag the merged version and create the release
         id: release
-        uses: python-semantic-release/python-semantic-release@v10.7.0
-        with:
-          github_token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          version=$(python3 -c 'import runpy; print(runpy.run_path("agentctl/__init__.py")["__version__"])')
+          previous_version=$(git show "$BEFORE_SHA:agentctl/__init__.py" | cut -d '"' -f 2)
+          if [[ "$version" == "$previous_version" ]]; then
+            exit 0
+          fi
+          tag="v$version"
+          if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+            if [[ "$(git rev-list -1 "$tag")" != "$(git rev-parse HEAD)" ]] ||
+               gh release view "$tag" >/dev/null 2>&1; then
+              exit 0
+            fi
+          else
+            git tag "$tag"
+            git push origin "refs/tags/$tag"
+          fi
+          gh release create "$tag" --verify-tag --generate-notes
+          echo "released=true" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
     outputs:
       released: ${{ steps.release.outputs.released }}
