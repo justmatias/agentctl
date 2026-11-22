@@ -103,6 +103,35 @@ def malformed_config_path(request: pytest.FixtureRequest, tmp_path: Path) -> Pat
     return config_path
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            '[mcp_servers.some-mcp]\ncommand = "npx"\nargs = ["-y", "some-mcp"]\n'
+            '[mcp_servers.some-mcp.env]\nTOKEN = "secret"\n',
+            id="nested_tables",
+        ),
+        pytest.param(
+            'mcp_servers.some-mcp = { command = "npx", args = ["-y", "some-mcp"],'
+            ' env = { TOKEN = "secret" } }\n',
+            id="inline_tables",
+        ),
+        pytest.param(
+            'mcp_servers.some-mcp.command = "npx"\n'
+            'mcp_servers.some-mcp.args = ["-y", "some-mcp"]\n'
+            'mcp_servers.some-mcp.env.TOKEN = "secret"\n',
+            id="dotted_keys",
+        ),
+    ]
+)
+def equivalent_mcp_server_config_path(
+    request: pytest.FixtureRequest, tmp_path: Path
+) -> Path:
+    """One MCP server spelled three ways TOML allows, all meaning the same thing."""
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(request.param)
+    return config_path
+
+
 @pytest.fixture
 def _write_machine_wide_configs(adapter: CodexCliAdapter) -> None:
     """Install the two administrator-owned config files the adapter reports."""

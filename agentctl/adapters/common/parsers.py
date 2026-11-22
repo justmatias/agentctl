@@ -1,7 +1,6 @@
 import json
 import re
 from pathlib import Path
-from typing import Any
 
 import tomlkit
 import yaml
@@ -21,7 +20,7 @@ SKILL_FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)", re.
 
 
 def _parse_mcp_server_entries(
-    servers: Any, *, path: Path, source: Source, headers_key: str
+    servers: object, *, path: Path, source: Source, headers_key: str
 ) -> list[Extension]:
     """Turn a source's `name -> server entry` mapping into canonical Extensions.
 

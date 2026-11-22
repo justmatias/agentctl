@@ -8,7 +8,7 @@ from agentctl.adapters import (
     WalkUpBehavior,
     WorkflowTargetForm,
 )
-from agentctl.adapters.codex_cli import default_codex_home
+from agentctl.adapters.codex_cli import COMMAND_LINE_ARGUMENTS, default_codex_home
 from agentctl.domain import (
     Extension,
     ExtensionType,
@@ -18,8 +18,6 @@ from agentctl.domain import (
     Scope,
     Source,
 )
-
-COMMAND_LINE_ARGUMENTS = "(command-line arguments)"
 
 
 def test_adapter_implements_the_source_adapter_protocol(
@@ -127,17 +125,17 @@ def test_parse_ignores_tables_that_are_not_mcp_servers(
     assert [extension.name for extension in extensions] == ["context7"]
 
 
-def test_parse_leaves_the_file_exactly_as_it_was_on_disk(
-    global_only_adapter: CodexCliAdapter,
+def test_parse_extracts_the_same_mcp_server_when_toml_spells_it_differently(
+    adapter: CodexCliAdapter, equivalent_mcp_server_config_path: Path
 ) -> None:
-    """Reading is non-destructive: comments, ordering and Codex-only keys the
-    canonical shape has no room for survive a parse untouched."""
-    config_path = global_only_adapter.codex_home / "config.toml"
-    before = config_path.read_bytes()
+    extensions = adapter.parse(equivalent_mcp_server_config_path)
 
-    global_only_adapter.parse(config_path)
-
-    assert config_path.read_bytes() == before
+    assert len(extensions) == 1
+    canonical = extensions[0].canonical_config
+    assert isinstance(canonical, McpServerConfig)
+    assert canonical.command == "npx"
+    assert canonical.args == ["-y", "some-mcp"]
+    assert canonical.env == {"TOKEN": "secret"}
 
 
 def test_parse_extracts_mcp_server_with_remote_transport(
@@ -155,7 +153,7 @@ def test_parse_extracts_mcp_server_with_remote_transport(
     assert canonical.headers == {"X-Example-Region": "us-east-1"}
 
 
-def test_parse_config_without_mcp_servers_yields_no_extensions(
+def test_parse_returns_nothing_when_config_has_no_mcp_servers(
     adapter: CodexCliAdapter, tmp_path: Path
 ) -> None:
     config_path = tmp_path / "config.toml"
@@ -195,7 +193,7 @@ def test_parse_extracts_instructions_override_file(
     assert "Ship nothing to production this week." in canonical.content
 
 
-def test_parse_malformed_toml_is_non_fatal(
+def test_parse_returns_nothing_when_toml_is_malformed(
     malformed_toml_adapter: CodexCliAdapter,
 ) -> None:
     assert not malformed_toml_adapter.parse(
@@ -203,19 +201,19 @@ def test_parse_malformed_toml_is_non_fatal(
     )
 
 
-def test_parse_missing_file_is_non_fatal(
+def test_parse_returns_nothing_when_file_is_missing(
     adapter: CodexCliAdapter, tmp_path: Path
 ) -> None:
     assert not adapter.parse(tmp_path / "does-not-exist.toml")
 
 
-def test_parse_skips_malformed_config_content(
+def test_parse_returns_nothing_when_config_shape_is_malformed(
     adapter: CodexCliAdapter, malformed_config_path: Path
 ) -> None:
     assert not adapter.parse(malformed_config_path)
 
 
-def test_parse_unrecognized_file_type_returns_empty_list(
+def test_parse_returns_nothing_when_file_type_is_unrecognized(
     adapter: CodexCliAdapter, tmp_path: Path
 ) -> None:
     unknown_path = tmp_path / "notes.txt"
@@ -224,7 +222,7 @@ def test_parse_unrecognized_file_type_returns_empty_list(
     assert not adapter.parse(unknown_path)
 
 
-def test_serialize_mcp_server_round_trips_through_parse(
+def test_serialized_mcp_server_round_trips_through_parse_when_reparsed(
     adapter: CodexCliAdapter, tmp_path: Path, mcp_server_extension: Extension
 ) -> None:
     rendered = adapter.serialize(mcp_server_extension)
@@ -245,7 +243,7 @@ def test_serialize_memory_file_returns_raw_content(adapter: CodexCliAdapter) -> 
     assert adapter.serialize(extension) == "# Hello\n"
 
 
-def test_walk_up_behavior(
+def test_walk_up_behavior_matches_codex_contract_when_extension_type_varies(
     adapter: CodexCliAdapter,
     expected_walk_up_behavior: tuple[ExtensionType, WalkUpBehavior],
 ) -> None:
@@ -269,7 +267,7 @@ def test_capabilities_declares_the_types_and_scopes_codex_has(
     assert capabilities.workflow_target_forms == frozenset({WorkflowTargetForm.SKILL})
 
 
-def test_precedence_chain_ranks_every_layer_for_a_project(
+def test_precedence_chain_lists_every_layer_in_precedence_order_when_project_given(
     global_and_project_adapter: CodexCliAdapter,
     global_and_project_project_root: Path,
 ) -> None:
@@ -290,6 +288,14 @@ def test_precedence_chain_ranks_every_layer_for_a_project(
         (Scope.USER, str(adapter.codex_home / "AGENTS.override.md")),
         (Scope.USER, str(adapter.codex_home / "AGENTS.md")),
     ]
+
+
+def test_precedence_chain_numbers_layers_consecutively_when_project_given(
+    global_and_project_adapter: CodexCliAdapter,
+    global_and_project_project_root: Path,
+) -> None:
+    chain = global_and_project_adapter.precedence_chain(global_and_project_project_root)
+
     assert [layer.order_rank for layer in chain.layers] == list(range(1, 10))  # type: ignore[union-attr]
 
 
@@ -315,7 +321,7 @@ def test_precedence_chain_omits_project_layers_for_the_global_view(
     assert [layer.order_rank for layer in chain.layers] == list(range(1, 7))  # type: ignore[union-attr]
 
 
-def test_command_line_argument_layer_can_never_resolve(
+def test_command_line_argument_layer_never_resolves_when_scanned_statically(
     adapter: CodexCliAdapter,
 ) -> None:
     """`-c` overrides outrank every file but the managed one, and never touch
@@ -381,7 +387,7 @@ def test_agents_file_resolves_when_no_override_shadows_it(
     assert agents_layer.resolves is True
 
 
-def test_managed_config_path_is_operating_system_specific(
+def test_managed_config_path_follows_platform_when_operating_system_varies(
     adapter: CodexCliAdapter, expected_managed_config_path: Path
 ) -> None:
     assert adapter.managed_config_path == expected_managed_config_path
