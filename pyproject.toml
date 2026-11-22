@@ -169,6 +169,9 @@ match = "(main|master)"
 prerelease_token = "rc"
 prerelease = false
 
+[tool.semantic_release.changelog]
+exclude_commit_patterns = ['^chore\(release\): prepare PR version$']
+
 [tool.semantic_release.changelog.default_templates]
 changelog_file = "CHANGELOG.md"
 
