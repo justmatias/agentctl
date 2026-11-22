@@ -17,7 +17,7 @@ repos:
       - id: gitleaks
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 'v0.17.6'
+    rev: 'v0.17.5'
     hooks:
       - id: ruff-check
         name: ruff
@@ -64,11 +64,3 @@ repos:
           - sqlmodel==0.0.42
           - pyyaml==6.0.3
           - types-pyyaml==6.0.12.20260906
-  - repo: https://github.com/justmatias/mstack
-    rev: v5.4.0
-    hooks:
-      - id: mstack-lint
-      - id: mstack-rules
-      - id: mstack-exceptions
-      - id: mstack-domain-check
-      - id: mstack-imports

@@ -1,6 +1,0 @@
-# ast-grep config (written by `mstack init`): one rule per file in rules/, and
-# its valid and invalid cases in rule-tests/<id>-test.yml.
-ruleDirs:
-  - rules
-testConfigs:
-  - testDir: rule-tests
