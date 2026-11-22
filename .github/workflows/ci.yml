@@ -6,44 +6,13 @@ on:
   workflow_dispatch:
   pull_request:
     branches: ["main"]
-    types: [opened, synchronize, reopened, edited]
 
+# Read-only by default: these jobs run code from the PR branch. Jobs that push
+# to the PR branch ask for write access themselves.
 permissions:
-  id-token: write
-  contents: write
-  pull-requests: write
-  actions: write
+  contents: read
 
 jobs:
-  pr-title:
-    name: Standardize PR title
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Auto-generate conventional PR title
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          CURRENT_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+'
-          if echo "$CURRENT_TITLE" | grep -qE "$PATTERN"; then
-            echo "Title already conventional, skipping."
-            exit 0
-          fi
-          FIRST_COMMIT_SUBJECT=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --jq '.[0].commit.message' | head -1)
-          if echo "$FIRST_COMMIT_SUBJECT" | grep -qE "$PATTERN"; then
-            NEW_TITLE="$FIRST_COMMIT_SUBJECT"
-          else
-            NEW_TITLE="chore: $FIRST_COMMIT_SUBJECT"
-          fi
-          gh pr edit "$PR_NUMBER" --repo "$REPO" --title "$NEW_TITLE"
-
-      - uses: amannn/action-semantic-pull-request@v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   mstack:
     name: mstack lint
     permissions:
@@ -57,6 +26,8 @@ jobs:
 
   lint:
     name: Lint (Python ${{ matrix.python-version }})
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -133,6 +104,8 @@ jobs:
   update-hooks:
     name: Update pre-commit hooks
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -159,96 +132,6 @@ jobs:
           git add -A
           git diff --staged --quiet || git commit -m "chore(config): update pre-commit hooks"
           git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-
-  prepare-release:
-    name: Prepare release in PR
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: [pr-title, lint, update-hooks]
-    permissions:
-      actions: write
-      contents: write
-      pull-requests: read
-    concurrency:
-      group: prepare-release-${{ github.event.pull_request.number }}
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-python-env
-        with:
-          python-version: "3.13"
-          install-dependencies: "false"
-
-      - name: Update version and changelog
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          pr=$(gh pr view "$PR_NUMBER" --json headRefOid,title --jq '[.headRefOid,.title] | @tsv')
-          IFS=$'\t' read -r head title <<< "$pr"
-          if [[ "$head" != "$(git rev-parse HEAD)" ]]; then
-            exit 0
-          fi
-
-          breaking='^[a-z]+(\([^)]*\))?!:'
-          feature='^feat(\([^)]*\))?:'
-          fix='^(fix|perf)(\([^)]*\))?:'
-          level=
-          if [[ "$title" =~ $breaking ]]; then
-            level=major
-          elif [[ "$title" =~ $feature ]]; then
-            level=minor
-          elif [[ "$title" =~ $fix ]]; then
-            level=patch
-          fi
-
-          base=$(git merge-base "origin/$BASE_REF" HEAD)
-          previous=$(git log --format=%H --author='github-actions\[bot\]' \
-            --grep='^chore(release): prepare PR version$' "$base..HEAD")
-          if [[ -z "$level" && -z "$previous" ]]; then
-            exit 0
-          fi
-
-          release_files=(agentctl/__init__.py CHANGELOG.md)
-          if [[ -n "$previous" ]]; then
-            # Reverse only previous bot changes, preserving edits made by contributors.
-            mapfile -t release_commits <<< "$previous"
-            git revert --no-commit "${release_commits[@]}"
-            git revert --quit
-          fi
-          if [[ -n "$level" ]]; then
-            if ! git diff --quiet "$base" "origin/$BASE_REF" -- "${release_files[@]}"; then
-              echo "::error::Update the PR branch from $BASE_REF before preparing a release."
-              exit 1
-            fi
-            # Wait for the preceding release to be tagged before calculating the next bump.
-            version=$(git show "$base:agentctl/__init__.py" | cut -d '"' -f 2)
-            if ! git merge-base --is-ancestor "refs/tags/v$version" "$base" 2>/dev/null; then
-              echo "::error::The base version v$version must be tagged before preparing a release."
-              exit 1
-            fi
-            git switch -C main
-            env -u GITHUB_OUTPUT uvx --from python-semantic-release==10.7.0 semantic-release version \
-              "--$level" --no-commit --no-tag --no-push --no-vcs-release
-          fi
-
-          git add -- "${release_files[@]}"
-          if ! git diff --cached --quiet; then
-            git -c user.name='github-actions[bot]' -c user.email='github-actions[bot]@users.noreply.github.com' \
-              commit -m "chore(release): prepare PR version"
-            git push origin "HEAD:refs/heads/$HEAD_REF"
-          elif [[ "${GITHUB_RUN_ATTEMPT:-1}" == 1 || -z "$previous" ]]; then
-            exit 0
-          fi
-          # Dispatch CI because a GITHUB_TOKEN push may require approval to run PR checks.
-          gh workflow run ci.yml --ref "$HEAD_REF"
 
   versioning:
     name: Versioning
