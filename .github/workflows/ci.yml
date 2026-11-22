@@ -148,6 +148,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup environment
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: "3.13"
+          install-dependencies: "false"
+
       - name: Tag the merged version and create the release
         id: release
         env:
@@ -169,7 +175,10 @@ jobs:
             git tag "$tag"
             git push origin "refs/tags/$tag"
           fi
-          gh release create "$tag" --verify-tag --generate-notes
+          # Creates the GitHub release for the tag, with the same notes
+          # semantic-release wrote to CHANGELOG.md.
+          uvx --from python-semantic-release==10.7.0 semantic-release changelog \
+            --post-to-release-tag "$tag"
           echo "released=true" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
