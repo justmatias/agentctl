@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import pytest
@@ -10,6 +9,7 @@ from agentctl.adapters import (
     WalkUpStop,
 )
 from agentctl.domain import Extension, ExtensionType, McpServerConfig, Source
+from tests.adapters.claude_code.helpers import agents_md_plugin_settings
 from tests.adapters.scenarios import copy_fixture_scenario
 
 MALFORMED_SETTINGS_CONTENT = {
@@ -225,14 +225,6 @@ def expected_managed_settings_path(
     return EXPECTED_MANAGED_SETTINGS_PATHS[request.param]
 
 
-def _agents_md_plugin_settings(plugin_id: str) -> str:
-    return json.dumps({
-        "pluginConfigs": {
-            plugin_id: {"options": {"instructionFiles": "claude-md-and-agents-md"}}
-        }
-    })
-
-
 @pytest.fixture(
     params=[
         ("user", "cc-plugin-agents-md@builtin"),
@@ -252,7 +244,7 @@ def _enable_agents_md_loading(
         else adapter.managed_settings_path
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_agents_md_plugin_settings(plugin_id), encoding="utf-8")
+    path.write_text(agents_md_plugin_settings(plugin_id), encoding="utf-8")
 
 
 @pytest.fixture
@@ -262,7 +254,7 @@ def _enable_agents_md_loading_in_project_settings(
     path = adapter.project_settings_path(empty_project_root)
     path.parent.mkdir(parents=True)
     path.write_text(
-        _agents_md_plugin_settings("cc-plugin-agents-md@builtin"), encoding="utf-8"
+        agents_md_plugin_settings(), encoding="utf-8"
     )
 
 

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from agentctl.adapters import ClaudeCodeAdapter, CodexCliAdapter, DotAgentsAdapter
+from tests.adapters.claude_code.helpers import agents_md_plugin_settings
 from tests.adapters.dot_agents.helpers import write_file
 
 
@@ -145,8 +146,4 @@ def _link_claude_and_shared_instructions_to_root_agents_md(
 
 @pytest.fixture
 def _enable_claude_agents_md_loading(claude_code_adapter: ClaudeCodeAdapter) -> None:
-    write_file(
-        claude_code_adapter.user_settings_path,
-        '{"pluginConfigs": {"cc-plugin-agents-md@builtin": '
-        '{"options": {"instructionFiles": "claude-md-and-agents-md"}}}}',
-    )
+    write_file(claude_code_adapter.user_settings_path, agents_md_plugin_settings())
