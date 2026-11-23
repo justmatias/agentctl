@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, ValidationError
 
 from agentctl.adapters.common import (
     consulted_file_layer,
@@ -36,22 +36,22 @@ from agentctl.utils import logger
 
 from .serializers import SERIALIZERS
 
-# Older Claude Code versions use the second ID; newer versions read either.
-# https://code.claude.com/docs/en/memory#when-claude-code-reads-agents-md
-AGENTS_MD_PLUGIN_IDS = ("cc-plugin-agents-md@builtin", "agents-md@builtin")
 
+class _InstructionFilesSetting(BaseModel):
+    """The `instructionFiles` option of Claude's built-in AGENTS.md plugin.
 
-class _InstructionFilesOptions(BaseModel):
-    instruction_files: str | None = Field(default=None, alias="instructionFiles")
+    Older Claude Code versions use the second plugin ID; newer ones read either.
+    https://code.claude.com/docs/en/memory#when-claude-code-reads-agents-md
+    """
 
-
-class _PluginConfig(BaseModel):
-    options: _InstructionFilesOptions = _InstructionFilesOptions()
-
-
-class _PluginSettings(BaseModel):
-    plugin_configs: dict[str, _PluginConfig] = Field(
-        default_factory=dict, alias="pluginConfigs"
+    value: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            *(
+                AliasPath("pluginConfigs", plugin_id, "options", "instructionFiles")
+                for plugin_id in ("cc-plugin-agents-md@builtin", "agents-md@builtin")
+            )
+        ),
     )
 
 
@@ -119,16 +119,14 @@ class ClaudeCodeAdapter:
             if not path.is_file():
                 continue
             try:
-                settings = _PluginSettings.model_validate_json(
+                setting = _InstructionFilesSetting.model_validate_json(
                     path.read_text(encoding="utf-8")
                 )
             except (OSError, UnicodeDecodeError, ValidationError) as exc:
                 logger.warning(f"Skipping unreadable settings in {path}: {exc}")
                 continue
-            for plugin_id in AGENTS_MD_PLUGIN_IDS:
-                plugin = settings.plugin_configs.get(plugin_id)
-                if plugin is not None and plugin.options.instruction_files is not None:
-                    return plugin.options.instruction_files
+            if setting.value is not None:
+                return setting.value
         return None
 
     def locate_global_config(self) -> list[Path]:

@@ -24,49 +24,6 @@ from agentctl.domain import (
 )
 
 
-def _is_shared_symlink(
-    path: Path, inventory_targets: set[Path], shared_directories: list[Path]
-) -> bool:
-    """Whether `path` is a symlink into the shared inventory or directories."""
-    target = path.resolve()
-    return path.absolute() != target and (
-        target in inventory_targets
-        or any(
-            target.is_relative_to(directory.resolve())
-            for directory in shared_directories
-        )
-    )
-
-
-def _annotate_native_layers(
-    native_layers: list[PrecedenceLayer],
-    inventory_targets: set[Path],
-    shared_directories: list[Path],
-) -> tuple[list[PrecedenceLayer], set[Path]]:
-    """Mark shared symlinks and keep one resolving layer per loaded file.
-
-    Returns the annotated layers and the files they load.
-    """
-    layers: list[PrecedenceLayer] = []
-    loaded_targets: set[Path] = set()
-    for layer in native_layers:
-        if not isinstance(layer, ConsultedLayer) or not layer.exists:
-            layers.append(layer)
-            continue
-        path = Path(layer.file_path)
-        target = path.resolve()
-        update: dict[str, object] = {}
-        if _is_shared_symlink(path, inventory_targets, shared_directories):
-            update["symlink_target"] = str(target)
-        if layer.resolves and target in loaded_targets:
-            # A higher-precedence layer already loads this file.
-            update["resolves"] = False
-        elif layer.resolves:
-            loaded_targets.add(target)
-        layers.append(layer.model_copy(update=update))
-    return layers, loaded_targets
-
-
 @dataclass(kw_only=True)
 class DotAgentsAdapter:
     source: ClassVar[Source] = Source.DOT_AGENTS
@@ -132,6 +89,51 @@ class DotAgentsAdapter:
             )
         return PrecedenceChain(source=self.source, layers=layers)
 
+    @staticmethod
+    def _is_shared_symlink(
+        path: Path, inventory_targets: set[Path], shared_directories: list[Path]
+    ) -> bool:
+        """Whether `path` is a symlink into the shared inventory or directories."""
+        target = path.resolve()
+        return path.absolute() != target and (
+            target in inventory_targets
+            or any(
+                target.is_relative_to(directory.resolve())
+                for directory in shared_directories
+            )
+        )
+
+
+    @classmethod
+    def _annotate_native_layers(
+        cls,
+        native_layers: list[PrecedenceLayer],
+        inventory_targets: set[Path],
+        shared_directories: list[Path],
+    ) -> tuple[list[PrecedenceLayer], set[Path]]:
+        """Mark shared symlinks and keep one resolving layer per loaded file.
+
+        Returns the annotated layers and the files they load.
+        """
+        layers: list[PrecedenceLayer] = []
+        loaded_targets: set[Path] = set()
+        for layer in native_layers:
+            if not isinstance(layer, ConsultedLayer) or not layer.exists:
+                layers.append(layer)
+                continue
+            path = Path(layer.file_path)
+            target = path.resolve()
+            update: dict[str, object] = {}
+            if cls._is_shared_symlink(path, inventory_targets, shared_directories):
+                update["symlink_target"] = str(target)
+            if layer.resolves and target in loaded_targets:
+                # A higher-precedence layer already loads this file.
+                update["resolves"] = False
+            elif layer.resolves:
+                loaded_targets.add(target)
+            layers.append(layer.model_copy(update=update))
+        return layers, loaded_targets
+
     def consumption_report(
         self, harness: SourceAdapter, project_root: Path | None
     ) -> PrecedenceChain:
@@ -148,7 +150,7 @@ class DotAgentsAdapter:
         }
         inventory_targets = {path.resolve() for path in inventory_paths}
 
-        layers, loaded_targets = _annotate_native_layers(
+        layers, loaded_targets = self._annotate_native_layers(
             native.layers, inventory_targets, shared_directories
         )
 
