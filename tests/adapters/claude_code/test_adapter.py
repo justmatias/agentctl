@@ -351,7 +351,7 @@ def test_precedence_chain_reports_managed_settings_existence(
     assert managed_layer.order_rank == 1
 
 
-def test_precedence_chain_reports_agents_md_as_unconfirmed(
+def test_precedence_chain_reports_agents_md_as_unconfirmed_when_project_is_given(
     adapter: ClaudeCodeAdapter, tmp_path: Path
 ) -> None:
     chain = adapter.precedence_chain(tmp_path)
