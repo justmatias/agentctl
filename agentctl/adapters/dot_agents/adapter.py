@@ -109,20 +109,22 @@ class DotAgentsAdapter:
         layers: list[PrecedenceLayer] = []
         alias_targets: set[Path] = set()
         for layer in native.layers:
-            if isinstance(layer, ConsultedLayer) and layer.exists:
-                path = Path(layer.file_path)
-                target = path.resolve()
-                if path.absolute() != target and (
-                    target in inventory_targets
-                    or any(target.is_relative_to(root) for root in shared_roots)
-                ):
-                    if layer.resolves:
-                        alias_targets.add(target)
-                    layers.append(
-                        layer.model_copy(update={"symlink_target": str(target)})
-                    )
-                    continue
-            layers.append(layer)
+            if not isinstance(layer, ConsultedLayer) or not layer.exists:
+                layers.append(layer)
+                continue
+
+            path = Path(layer.file_path)
+            target = path.resolve()
+            is_shared_target = target in inventory_targets or any(
+                target.is_relative_to(root) for root in shared_roots
+            )
+            if path.absolute() == target or not is_shared_target:
+                layers.append(layer)
+                continue
+
+            if layer.resolves:
+                alias_targets.add(target)
+            layers.append(layer.model_copy(update={"symlink_target": str(target)}))
 
         native_paths = {Path(layer.file_path).absolute() for layer in native.layers}
         for layer in shared_layers:
