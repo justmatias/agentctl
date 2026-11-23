@@ -63,19 +63,17 @@ def test_winner_stays_the_same_when_shared_support_is_unconfirmed(
 @pytest.mark.parametrize("external_target", [False, True], ids=["local", "external"])
 @pytest.mark.parametrize("shadowed", [False, True], ids=["active", "shadowed"])
 def test_report_uses_codex_symlink_only_when_it_resolves(
-    tmp_path: Path,
     shadowed: bool,
     external_target: bool,
-    empty_project_root: Path,
     project_shared_instructions: Path,
     dot_agents_adapter: DotAgentsAdapter,
     codex_cli_adapter: CodexCliAdapter,
 ) -> None:
-    project = empty_project_root
     shared = project_shared_instructions
+    project = shared.parent.parent
     target = shared
     if external_target:
-        target = shared.rename(tmp_path / "dotfiles.md")
+        target = shared.rename(project.parent / "dotfiles.md")
         shared.symlink_to(target)
     native = project / "AGENTS.md"
     native.symlink_to(Path(".agents/AGENTS.md"))

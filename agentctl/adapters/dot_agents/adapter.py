@@ -115,10 +115,10 @@ class DotAgentsAdapter:
 
             path = Path(layer.file_path)
             target = path.resolve()
-            is_shared_target = target in inventory_targets or any(
-                target.is_relative_to(root) for root in shared_roots
-            )
-            if path.absolute() == target or not is_shared_target:
+            if path.absolute() == target or (
+                target not in inventory_targets
+                and not any(target.is_relative_to(root) for root in shared_roots)
+            ):
                 layers.append(layer)
                 continue
 
