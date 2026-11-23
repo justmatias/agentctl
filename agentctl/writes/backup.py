@@ -14,6 +14,11 @@ class Backup:
     created_at: datetime
 
 
+def _restore_backup(backup_path: Path, destination: Path) -> None:
+    atomic_write(destination, backup_path.read_text(encoding="utf-8"))
+    logger.info(f"Restored {destination} from {backup_path}")
+
+
 class RollbackIndex:
     """Records every backup made this session and can undo them, in order.
 
@@ -52,16 +57,12 @@ class RollbackIndex:
         path = Path(path)
         for record in reversed(self._backups):
             if record.original_path == path:
-                atomic_write(path, record.backup_path.read_text(encoding="utf-8"))
-                logger.info(f"Restored {path} from {record.backup_path}")
+                _restore_backup(record.backup_path, path)
                 return True
         return False
 
     def restore_all(self) -> None:
         """Undo every write this session, most recent first, then clear the index."""
         for record in reversed(self._backups):
-            atomic_write(
-                record.original_path, record.backup_path.read_text(encoding="utf-8")
-            )
-            logger.info(f"Restored {record.original_path} from {record.backup_path}")
+            _restore_backup(record.backup_path, record.original_path)
         self._backups.clear()
