@@ -28,6 +28,7 @@ from agentctl.domain import (
     PrecedenceLayer,
     Scope,
     Source,
+    UnconfirmedLayer,
 )
 from agentctl.utils import logger
 
@@ -195,24 +196,46 @@ class ClaudeCodeAdapter:
             )
         )
 
-        # Verified against current Claude Code docs (code.claude.com/docs/en/memory,
-        # "AGENTS.md" section, fetched 2026-08-13): "Claude Code reads CLAUDE.md,
-        # not AGENTS.md." Confirmed not_consulted, not unconfirmed (SPECS.md §5.1).
-        agents_md_path = (
-            (project_root / "AGENTS.md")
-            if project_root is not None
-            else (self.home / "AGENTS.md")
-        )
+        # https://code.claude.com/docs/en/memory#choose-where-to-put-claude-md-files
+        if project_root is not None:
+            layers.extend(
+                consulted_file_layer(
+                    scope=Scope.PROJECT,
+                    path=project_root / filename,
+                    origin=LayerOrigin.REGISTERED_PROJECT,
+                    order_rank=rank,
+                )
+                for rank, filename in enumerate(
+                    ("CLAUDE.local.md", ".claude/CLAUDE.md", "CLAUDE.md"), start=6
+                )
+            )
         layers.append(
-            NotConsultedLayer(
-                scope=Scope.GLOBAL,
-                file_path=str(agents_md_path),
-                exists=agents_md_path.is_file(),
-                origin=(
-                    LayerOrigin.REGISTERED_PROJECT
-                    if project_root is not None
-                    else LayerOrigin.GLOBAL
-                ),
+            consulted_file_layer(
+                scope=Scope.USER,
+                path=self.home / ".claude" / "CLAUDE.md",
+                origin=LayerOrigin.GLOBAL,
+                order_rank=9,
             )
         )
+        if project_root is not None:
+            # Direct AGENTS.md support depends on the Claude version and settings.
+            agents_path = project_root / "AGENTS.md"
+            layers.append(
+                UnconfirmedLayer(
+                    scope=Scope.PROJECT,
+                    file_path=str(agents_path),
+                    exists=agents_path.is_file(),
+                    origin=LayerOrigin.REGISTERED_PROJECT,
+                )
+            )
+        else:
+            agents_path = self.home / "AGENTS.md"
+            layers.append(
+                NotConsultedLayer(
+                    scope=Scope.GLOBAL,
+                    file_path=str(agents_path),
+                    exists=agents_path.is_file(),
+                    origin=LayerOrigin.GLOBAL,
+                )
+            )
         return PrecedenceChain(source=self.source, project_id=None, layers=layers)

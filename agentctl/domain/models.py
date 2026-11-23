@@ -106,6 +106,7 @@ class ConsultedLayer(_PrecedenceLayerBase):
 
     status: Literal[LayerStatus.CONSULTED] = LayerStatus.CONSULTED
     order_rank: int
+    symlink_target: str | None = None
     resolves: bool
 
 

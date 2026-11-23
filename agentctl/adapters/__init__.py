@@ -15,6 +15,7 @@ from .common import (
     serialize_memory_file,
     serialize_skill,
 )
+from .dot_agents import DotAgentsAdapter
 from .fake import NullAdapter
 from .protocol import (
     AdapterCapabilities,
@@ -31,6 +32,7 @@ __all__ = [
     "AdapterRegistry",
     "ClaudeCodeAdapter",
     "CodexCliAdapter",
+    "DotAgentsAdapter",
     "MergeSemantics",
     "NullAdapter",
     "Serializer",
