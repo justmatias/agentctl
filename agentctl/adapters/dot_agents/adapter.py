@@ -114,12 +114,11 @@ class DotAgentsAdapter:
         """Record the shared target of each existing consulted layer that links to one."""
         layers: list[PrecedenceLayer] = []
         for layer in native_layers:
-            target = (
-                cls._shared_symlink_target(
-                    Path(layer.file_path), inventory_targets, shared_directories
-                )
-                if isinstance(layer, ConsultedLayer) and layer.exists
-                else None
+            if not isinstance(layer, ConsultedLayer) or not layer.exists:
+                layers.append(layer)
+                continue
+            target = cls._shared_symlink_target(
+                Path(layer.file_path), inventory_targets, shared_directories
             )
             layers.append(
                 layer

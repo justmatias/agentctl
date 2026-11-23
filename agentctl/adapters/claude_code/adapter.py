@@ -39,7 +39,7 @@ from agentctl.utils import logger
 from .serializers import SERIALIZERS
 
 
-class _InstructionFilesSetting(BaseModel):
+class InstructionFilesSetting(BaseModel):
     """The `instructionFiles` option of Claude's built-in AGENTS.md plugin.
 
     Older Claude Code versions use the second plugin ID; newer ones read either.
@@ -114,6 +114,7 @@ class ClaudeCodeAdapter:
         slug = re.sub(r"[^A-Za-z0-9]", "-", str(project_root))
         return self.home / ".claude" / "projects" / slug / "memory" / "MEMORY.md"
 
+    @property
     def instruction_files_setting(self) -> str | None:
         """The `instructionFiles` option, which Claude reads only from managed
         and user settings, managed first."""
@@ -121,7 +122,7 @@ class ClaudeCodeAdapter:
             if not path.is_file():
                 continue
             try:
-                setting = _InstructionFilesSetting.model_validate_json(
+                setting = InstructionFilesSetting.model_validate_json(
                     path.read_text(encoding="utf-8")
                 )
             except (OSError, UnicodeDecodeError, ValidationError) as error:
@@ -191,7 +192,7 @@ class ClaudeCodeAdapter:
     ) -> PrecedenceLayer:
         """The project AGENTS.md layer, as the `instructionFiles` setting decides."""
         path = project_root / "AGENTS.md"
-        setting = self.instruction_files_setting()
+        setting = self.instruction_files_setting
         if setting == "claude-md-and-agents-md":
             return consulted_file_layer(
                 scope=Scope.PROJECT,
