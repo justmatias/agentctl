@@ -15,10 +15,10 @@ from agentctl.domain import (
     ExtensionType,
     McpServerConfig,
     MemoryFileConfig,
-    NotConsultedLayer,
     Scope,
     SkillConfig,
     Source,
+    UnconfirmedLayer,
 )
 
 
@@ -294,7 +294,12 @@ def test_precedence_chain_reports_five_layer_scope_for_a_project(
     chain = global_and_project_adapter.precedence_chain(project_root)
 
     assert chain.source == Source.CLAUDE_CODE
-    consulted = [layer for layer in chain.layers if isinstance(layer, ConsultedLayer)]
+    consulted = [
+        layer
+        for layer in chain.layers
+        if isinstance(layer, ConsultedLayer)
+        and Path(layer.file_path).suffix != ".md"
+    ]
     assert [
         layer.scope for layer in sorted(consulted, key=lambda layer: layer.order_rank)
     ] == [
@@ -346,17 +351,17 @@ def test_precedence_chain_reports_managed_settings_existence(
     assert managed_layer.order_rank == 1
 
 
-def test_precedence_chain_reports_agents_md_as_not_consulted(
+def test_precedence_chain_reports_agents_md_as_unconfirmed(
     adapter: ClaudeCodeAdapter, tmp_path: Path
 ) -> None:
     chain = adapter.precedence_chain(tmp_path)
 
-    not_consulted = [
-        layer for layer in chain.layers if isinstance(layer, NotConsultedLayer)
+    unconfirmed = [
+        layer for layer in chain.layers if isinstance(layer, UnconfirmedLayer)
     ]
-    assert len(not_consulted) == 1
-    assert not_consulted[0].file_path == str(tmp_path / "AGENTS.md")
-    assert not_consulted[0].resolves is False
+    assert len(unconfirmed) == 1
+    assert unconfirmed[0].file_path == str(tmp_path / "AGENTS.md")
+    assert unconfirmed[0].resolves is False
 
 
 def test_default_managed_settings_path_is_operating_system_specific(
