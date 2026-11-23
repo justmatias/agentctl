@@ -24,15 +24,6 @@ from agentctl.domain import (
 )
 
 
-def _locate_config(root: Path, *, project: bool) -> list[Path]:
-    shared = root / ".agents"
-    candidates = [shared / "AGENTS.md", shared / "memory" / "MEMORY.md"]
-    if project:
-        candidates.extend([root / "AGENTS.md", root / "MEMORY.md"])
-    paths = [shared] if shared.is_dir() else []
-    return paths + [path for path in candidates if path.is_file()]
-
-
 @dataclass(kw_only=True)
 class DotAgentsAdapter:
     source: ClassVar[Source] = Source.DOT_AGENTS
@@ -43,12 +34,21 @@ class DotAgentsAdapter:
     )
     home: Path = field(default_factory=Path.home)
 
-    def locate_global_config(self) -> list[Path]:
-        return _locate_config(self.home, project=False)
-
     @staticmethod
-    def locate_project_config(project_root: Path) -> list[Path]:
-        return _locate_config(project_root, project=True)
+    def _locate_config(root: Path, *, project: bool) -> list[Path]:
+        shared = root / ".agents"
+        candidates = [shared / "AGENTS.md", shared / "memory" / "MEMORY.md"]
+        if project:
+            candidates.extend([root / "AGENTS.md", root / "MEMORY.md"])
+        paths = [shared] if shared.is_dir() else []
+        return paths + [path for path in candidates if path.is_file()]
+
+    def locate_global_config(self) -> list[Path]:
+        return self._locate_config(self.home, project=False)
+
+    @classmethod
+    def locate_project_config(cls, project_root: Path) -> list[Path]:
+        return cls._locate_config(project_root, project=True)
 
     def parse(self, path: Path) -> list[Extension]:
         if path.name not in {"AGENTS.md", "MEMORY.md"} or not path.is_file():

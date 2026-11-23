@@ -35,20 +35,18 @@ def test_shared_inventory_is_available_without_a_harness(tmp_path: Path) -> None
 
 
 def test_winner_stays_the_same_when_shared_support_is_unconfirmed(
-    tmp_path: Path,
+    empty_project_root: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    codex_cli_adapter: CodexCliAdapter,
 ) -> None:
-    project = tmp_path / "project"
+    project = empty_project_root
     shared = project / ".agents" / "memory" / "MEMORY.md"
     shared.parent.mkdir(parents=True)
     native = project / "AGENTS.md"
     native.write_text("native", encoding="utf-8")
-    harness = CodexCliAdapter(
-        codex_home=tmp_path / ".codex", system_config_directory=tmp_path / "system"
-    )
-    adapter = DotAgentsAdapter(home=tmp_path)
-    before = adapter.consumption_report(harness, project)
+    before = dot_agents_adapter.consumption_report(codex_cli_adapter, project)
     shared.write_text("shared", encoding="utf-8")
-    after = adapter.consumption_report(harness, project)
+    after = dot_agents_adapter.consumption_report(codex_cli_adapter, project)
 
     assert [layer for layer in before.layers if layer.resolves] == [
         layer for layer in after.layers if layer.resolves
@@ -68,23 +66,23 @@ def test_report_uses_codex_symlink_only_when_it_resolves(
     tmp_path: Path,
     shadowed: bool,
     external_target: bool,
+    empty_project_root: Path,
+    project_shared_instructions: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    codex_cli_adapter: CodexCliAdapter,
 ) -> None:
-    project = tmp_path / "project"
-    shared = project / ".agents" / "AGENTS.md"
-    shared.parent.mkdir(parents=True)
-    target = tmp_path / "dotfiles.md" if external_target else shared
-    target.write_text("shared", encoding="utf-8")
+    project = empty_project_root
+    shared = project_shared_instructions
+    target = shared
     if external_target:
+        target = shared.rename(tmp_path / "dotfiles.md")
         shared.symlink_to(target)
     native = project / "AGENTS.md"
     native.symlink_to(Path(".agents/AGENTS.md"))
     if shadowed:
         (project / "AGENTS.override.md").write_text("override", encoding="utf-8")
-    harness = CodexCliAdapter(
-        codex_home=tmp_path / ".codex", system_config_directory=tmp_path / "system"
-    )
 
-    chain = DotAgentsAdapter(home=tmp_path).consumption_report(harness, project)
+    chain = dot_agents_adapter.consumption_report(codex_cli_adapter, project)
 
     shared_layers = [layer for layer in chain.layers if layer.file_path == str(shared)]
     assert [layer.status for layer in shared_layers] == (
@@ -97,15 +95,16 @@ def test_report_uses_codex_symlink_only_when_it_resolves(
     assert layer.symlink_target == str(target)
 
 
-def test_report_uses_documented_direct_exclusion_for_claude(tmp_path: Path) -> None:
+def test_report_uses_documented_direct_exclusion_for_claude(
+    tmp_path: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> None:
     shared = tmp_path / ".agents" / "AGENTS.md"
     shared.parent.mkdir()
     shared.write_text("shared", encoding="utf-8")
-    harness = ClaudeCodeAdapter(
-        home=tmp_path, managed_settings_path=tmp_path / "settings.json"
-    )
 
-    chain = DotAgentsAdapter(home=tmp_path).consumption_report(harness, None)
+    chain = dot_agents_adapter.consumption_report(claude_code_adapter, None)
 
     layer = next(layer for layer in chain.layers if layer.file_path == str(shared))
     assert layer.status == LayerStatus.NOT_CONSULTED
@@ -116,23 +115,21 @@ def test_report_uses_documented_direct_exclusion_for_claude(tmp_path: Path) -> N
     "filename", ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"]
 )
 def test_report_records_shared_instructions_when_claude_reads_a_native_symlink(
-    tmp_path: Path,
     filename: str,
+    empty_project_root: Path,
+    project_shared_instructions: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    claude_code_adapter: ClaudeCodeAdapter,
 ) -> None:
-    project = tmp_path / "project"
-    shared = project / ".agents" / "AGENTS.md"
-    shared.parent.mkdir(parents=True)
-    shared.write_text("shared", encoding="utf-8")
+    project = empty_project_root
+    shared = project_shared_instructions
     native = project / filename
     native.parent.mkdir(parents=True, exist_ok=True)
     native.symlink_to(shared)
     root_memory = project / "MEMORY.md"
     root_memory.symlink_to(shared)
-    harness = ClaudeCodeAdapter(
-        home=tmp_path, managed_settings_path=tmp_path / "settings.json"
-    )
 
-    chain = DotAgentsAdapter(home=tmp_path).consumption_report(harness, project)
+    chain = dot_agents_adapter.consumption_report(claude_code_adapter, project)
 
     assert all(layer.file_path != str(shared) for layer in chain.layers)
     assert (
