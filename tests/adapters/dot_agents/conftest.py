@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from agentctl.adapters import ClaudeCodeAdapter, CodexCliAdapter, DotAgentsAdapter
+from tests.adapters.dot_agents.helpers import write_file
 
 
 @pytest.fixture
@@ -24,30 +25,24 @@ def claude_code_adapter(tmp_path: Path) -> ClaudeCodeAdapter:
     )
 
 
-def _write_file(path: Path, content: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    return path
-
-
 @pytest.fixture
 def global_shared_instructions(tmp_path: Path) -> Path:
-    return _write_file(tmp_path / ".agents" / "AGENTS.md", "shared")
+    return write_file(tmp_path / ".agents" / "AGENTS.md", "shared")
 
 
 @pytest.fixture
 def global_shared_memory(tmp_path: Path) -> Path:
-    return _write_file(tmp_path / ".agents" / "memory" / "MEMORY.md", "notes")
+    return write_file(tmp_path / ".agents" / "memory" / "MEMORY.md", "notes")
 
 
 @pytest.fixture
 def project_shared_instructions(empty_project_root: Path) -> Path:
-    return _write_file(empty_project_root / ".agents" / "AGENTS.md", "shared")
+    return write_file(empty_project_root / ".agents" / "AGENTS.md", "shared")
 
 
 @pytest.fixture
 def project_shared_memory(empty_project_root: Path) -> Path:
-    return _write_file(
+    return write_file(
         empty_project_root / ".agents" / "memory" / "MEMORY.md", "notes"
     )
 
@@ -55,14 +50,14 @@ def project_shared_memory(empty_project_root: Path) -> Path:
 @pytest.fixture
 def project_root_instruction_files(empty_project_root: Path) -> list[Path]:
     return [
-        _write_file(empty_project_root / filename, "notes")
+        write_file(empty_project_root / filename, "notes")
         for filename in ("AGENTS.md", "MEMORY.md")
     ]
 
 
 @pytest.fixture
 def native_project_instructions(empty_project_root: Path) -> Path:
-    return _write_file(empty_project_root / "AGENTS.md", "native")
+    return write_file(empty_project_root / "AGENTS.md", "native")
 
 
 @pytest.fixture(params=["local", "external"])
@@ -89,7 +84,7 @@ def codex_native_symlink(
 
 @pytest.fixture
 def _write_codex_override(empty_project_root: Path) -> None:
-    _write_file(empty_project_root / "AGENTS.override.md", "override")
+    write_file(empty_project_root / "AGENTS.override.md", "override")
 
 
 @pytest.fixture(params=["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"])
