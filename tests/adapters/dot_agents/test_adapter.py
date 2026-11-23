@@ -6,137 +6,232 @@ from agentctl.adapters import ClaudeCodeAdapter, CodexCliAdapter, DotAgentsAdapt
 from agentctl.domain import ConsultedLayer, LayerStatus, MemoryFileConfig
 
 
-def test_shared_inventory_is_available_without_a_harness(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    project = tmp_path / "project"
-    global_memory = home / ".agents" / "memory" / "MEMORY.md"
-    project_memory = project / ".agents" / "memory" / "MEMORY.md"
-    for path in (
-        global_memory,
-        project_memory,
-        project / "AGENTS.md",
-        project / "MEMORY.md",
-    ):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("notes", encoding="utf-8")
-
-    adapter = DotAgentsAdapter(home=home)
-
-    assert set(adapter.locate_global_config()) == {home / ".agents", global_memory}
-    assert set(adapter.locate_project_config(project)) == {
-        project / ".agents",
-        project_memory,
-        project / "AGENTS.md",
-        project / "MEMORY.md",
+def test_locate_global_config_finds_shared_directory_and_memory_when_present(
+    tmp_path: Path, global_shared_memory: Path, dot_agents_adapter: DotAgentsAdapter
+) -> None:
+    assert set(dot_agents_adapter.locate_global_config()) == {
+        tmp_path / ".agents",
+        global_shared_memory,
     }
-    assert adapter.parse(project_memory)[0].canonical_config == MemoryFileConfig(
-        content="notes", is_persistent_memory=True
-    )
 
 
-def test_winner_stays_the_same_when_shared_support_is_unconfirmed(
+def test_locate_project_config_finds_shared_and_root_files_when_present(
     empty_project_root: Path,
+    project_shared_memory: Path,
+    project_root_instruction_files: list[Path],
+    dot_agents_adapter: DotAgentsAdapter,
+) -> None:
+    assert set(dot_agents_adapter.locate_project_config(empty_project_root)) == {
+        empty_project_root / ".agents",
+        project_shared_memory,
+        *project_root_instruction_files,
+    }
+
+
+def test_parse_marks_content_as_persistent_memory_when_file_is_memory_md(
+    project_shared_memory: Path, dot_agents_adapter: DotAgentsAdapter
+) -> None:
+    assert dot_agents_adapter.parse(project_shared_memory)[
+        0
+    ].canonical_config == MemoryFileConfig(content="notes", is_persistent_memory=True)
+
+
+def test_consumption_report_keeps_native_winner_when_shared_memory_is_added(
+    empty_project_root: Path,
+    native_project_instructions: Path,
     dot_agents_adapter: DotAgentsAdapter,
     codex_cli_adapter: CodexCliAdapter,
 ) -> None:
-    project = empty_project_root
-    shared = project / ".agents" / "memory" / "MEMORY.md"
-    shared.parent.mkdir(parents=True)
-    native = project / "AGENTS.md"
-    native.write_text("native", encoding="utf-8")
-    before = dot_agents_adapter.consumption_report(codex_cli_adapter, project)
-    shared.write_text("shared", encoding="utf-8")
-    after = dot_agents_adapter.consumption_report(codex_cli_adapter, project)
-
-    assert [layer for layer in before.layers if layer.resolves] == [
-        layer for layer in after.layers if layer.resolves
-    ]
-    assert next(layer for layer in after.layers if layer.resolves).file_path == str(
-        native
+    before = dot_agents_adapter.consumption_report(
+        codex_cli_adapter, empty_project_root
     )
-    layer = after.layers[-1]
-    assert layer.file_path == str(shared)
+    shared = empty_project_root / ".agents" / "memory" / "MEMORY.md"
+    shared.parent.mkdir(parents=True)
+    shared.write_text("shared", encoding="utf-8")
+
+    after = dot_agents_adapter.consumption_report(codex_cli_adapter, empty_project_root)
+
+    winners = [layer for layer in after.layers if layer.resolves]
+    assert winners == [layer for layer in before.layers if layer.resolves]
+    assert winners[0].file_path == str(native_project_instructions)
+
+
+@pytest.mark.usefixtures("native_project_instructions")
+def test_consumption_report_appends_unranked_unconfirmed_layer_when_codex_ignores_shared_memory(
+    empty_project_root: Path,
+    project_shared_memory: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    codex_cli_adapter: CodexCliAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(codex_cli_adapter, empty_project_root)
+
+    layer = chain.layers[-1]
+    assert layer.file_path == str(project_shared_memory)
     assert layer.status == LayerStatus.UNCONFIRMED
     assert "order_rank" not in layer.model_dump()
 
 
-@pytest.mark.parametrize("external_target", [False, True], ids=["local", "external"])
-@pytest.mark.parametrize("shadowed", [False, True], ids=["active", "shadowed"])
-def test_report_uses_codex_symlink_only_when_it_resolves(
-    shadowed: bool,
-    external_target: bool,
+def test_consumption_report_records_symlink_target_when_codex_reads_native_symlink(
+    empty_project_root: Path,
+    shared_instructions_target: Path,
+    codex_native_symlink: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    codex_cli_adapter: CodexCliAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(codex_cli_adapter, empty_project_root)
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(codex_native_symlink)
+    )
+    assert isinstance(layer, ConsultedLayer)
+    assert layer.symlink_target == str(shared_instructions_target)
+
+
+@pytest.mark.usefixtures("shared_instructions_target")
+def test_consumption_report_resolves_codex_symlink_when_no_override_shadows_it(
+    empty_project_root: Path,
+    codex_native_symlink: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    codex_cli_adapter: CodexCliAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(codex_cli_adapter, empty_project_root)
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(codex_native_symlink)
+    )
+    assert layer.resolves
+
+
+@pytest.mark.usefixtures("_write_codex_override")
+def test_consumption_report_records_symlink_target_when_codex_symlink_is_shadowed(
+    empty_project_root: Path,
+    shared_instructions_target: Path,
+    codex_native_symlink: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    codex_cli_adapter: CodexCliAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(codex_cli_adapter, empty_project_root)
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(codex_native_symlink)
+    )
+    assert isinstance(layer, ConsultedLayer)
+    assert layer.symlink_target == str(shared_instructions_target)
+
+
+@pytest.mark.usefixtures("shared_instructions_target", "codex_native_symlink")
+def test_consumption_report_omits_shared_layer_when_codex_symlink_resolves(
+    empty_project_root: Path,
     project_shared_instructions: Path,
     dot_agents_adapter: DotAgentsAdapter,
     codex_cli_adapter: CodexCliAdapter,
 ) -> None:
-    shared = project_shared_instructions
-    project = shared.parent.parent
-    target = shared
-    if external_target:
-        target = shared.rename(project.parent / "dotfiles.md")
-        shared.symlink_to(target)
-    native = project / "AGENTS.md"
-    native.symlink_to(Path(".agents/AGENTS.md"))
-    if shadowed:
-        (project / "AGENTS.override.md").write_text("override", encoding="utf-8")
+    chain = dot_agents_adapter.consumption_report(codex_cli_adapter, empty_project_root)
 
-    chain = dot_agents_adapter.consumption_report(codex_cli_adapter, project)
-
-    shared_layers = [layer for layer in chain.layers if layer.file_path == str(shared)]
-    assert [layer.status for layer in shared_layers] == (
-        [LayerStatus.UNCONFIRMED] if shadowed else []
+    assert all(
+        layer.file_path != str(project_shared_instructions) for layer in chain.layers
     )
-    layer = next(layer for layer in chain.layers if layer.file_path == str(native))
+
+
+@pytest.mark.usefixtures(
+    "shared_instructions_target", "codex_native_symlink", "_write_codex_override"
+)
+def test_consumption_report_keeps_shared_layer_unconfirmed_when_codex_symlink_is_shadowed(
+    empty_project_root: Path,
+    project_shared_instructions: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    codex_cli_adapter: CodexCliAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(codex_cli_adapter, empty_project_root)
+
+    assert [
+        layer.status
+        for layer in chain.layers
+        if layer.file_path == str(project_shared_instructions)
+    ] == [LayerStatus.UNCONFIRMED]
+
+
+@pytest.mark.usefixtures("shared_instructions_target", "_write_codex_override")
+def test_consumption_report_keeps_symlink_unresolved_when_codex_override_shadows_it(
+    empty_project_root: Path,
+    codex_native_symlink: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    codex_cli_adapter: CodexCliAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(codex_cli_adapter, empty_project_root)
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(codex_native_symlink)
+    )
     assert layer.status == LayerStatus.CONSULTED
-    assert layer.resolves is not shadowed
-    assert isinstance(layer, ConsultedLayer)
-    assert layer.symlink_target == str(target)
+    assert not layer.resolves
 
 
-def test_report_uses_documented_direct_exclusion_for_claude(
-    tmp_path: Path,
+def test_consumption_report_marks_shared_instructions_not_consulted_when_harness_is_claude(
+    global_shared_instructions: Path,
     dot_agents_adapter: DotAgentsAdapter,
     claude_code_adapter: ClaudeCodeAdapter,
 ) -> None:
-    shared = tmp_path / ".agents" / "AGENTS.md"
-    shared.parent.mkdir()
-    shared.write_text("shared", encoding="utf-8")
-
     chain = dot_agents_adapter.consumption_report(claude_code_adapter, None)
 
-    layer = next(layer for layer in chain.layers if layer.file_path == str(shared))
+    layer = next(
+        layer
+        for layer in chain.layers
+        if layer.file_path == str(global_shared_instructions)
+    )
     assert layer.status == LayerStatus.NOT_CONSULTED
     assert not layer.resolves
 
 
-@pytest.mark.parametrize(
-    "filename", ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"]
-)
-def test_report_records_shared_instructions_when_claude_reads_a_native_symlink(
-    filename: str,
+def test_consumption_report_records_symlink_target_when_claude_reads_native_symlink(
+    empty_project_root: Path,
+    project_shared_instructions: Path,
+    claude_native_symlink: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(
+        claude_code_adapter, empty_project_root
+    )
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(claude_native_symlink)
+    )
+    assert isinstance(layer, ConsultedLayer)
+    assert layer.resolves
+    assert layer.symlink_target == str(project_shared_instructions)
+
+
+@pytest.mark.usefixtures("claude_native_symlink")
+def test_consumption_report_omits_shared_layer_when_claude_native_symlink_resolves(
     empty_project_root: Path,
     project_shared_instructions: Path,
     dot_agents_adapter: DotAgentsAdapter,
     claude_code_adapter: ClaudeCodeAdapter,
 ) -> None:
-    project = empty_project_root
-    shared = project_shared_instructions
-    native = project / filename
-    native.parent.mkdir(parents=True, exist_ok=True)
-    native.symlink_to(shared)
-    root_memory = project / "MEMORY.md"
-    root_memory.symlink_to(shared)
-
-    chain = dot_agents_adapter.consumption_report(claude_code_adapter, project)
-
-    assert all(layer.file_path != str(shared) for layer in chain.layers)
-    assert (
-        next(
-            layer for layer in chain.layers if layer.file_path == str(root_memory)
-        ).status
-        == LayerStatus.UNCONFIRMED
+    chain = dot_agents_adapter.consumption_report(
+        claude_code_adapter, empty_project_root
     )
-    layer = next(layer for layer in chain.layers if layer.file_path == str(native))
-    assert isinstance(layer, ConsultedLayer)
-    assert layer.resolves
-    assert layer.symlink_target == str(shared)
+
+    assert all(
+        layer.file_path != str(project_shared_instructions) for layer in chain.layers
+    )
+
+
+@pytest.mark.usefixtures("claude_native_symlink")
+def test_consumption_report_keeps_root_memory_unconfirmed_when_it_links_to_shared_instructions(
+    empty_project_root: Path,
+    project_root_memory_symlink: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(
+        claude_code_adapter, empty_project_root
+    )
+
+    layer = next(
+        layer
+        for layer in chain.layers
+        if layer.file_path == str(project_root_memory_symlink)
+    )
+    assert layer.status == LayerStatus.UNCONFIRMED
