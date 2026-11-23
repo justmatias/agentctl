@@ -49,7 +49,7 @@ dev = [
   "pytest-sugar>=1.1.1",
 ]
 
-build = ["build>=1.6.0"]
+build = ["build>=1.6.1"]
 
 ##################################
 # ruff configuration             #

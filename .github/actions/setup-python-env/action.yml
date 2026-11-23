@@ -28,6 +28,7 @@ runs:
       with:
         version: ${{ inputs.uv-version }}
         python-version: ${{ inputs.python-version }}
+        enable-cache: ${{ inputs.install-dependencies == 'true' && 'auto' || 'false' }}
 
     - name: Install dependencies
       if: inputs.install-dependencies == 'true'
