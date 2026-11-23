@@ -24,6 +24,49 @@ from agentctl.domain import (
 )
 
 
+def _is_shared_symlink(
+    path: Path, inventory_targets: set[Path], shared_directories: list[Path]
+) -> bool:
+    """Whether `path` is a symlink into the shared inventory or directories."""
+    target = path.resolve()
+    return path.absolute() != target and (
+        target in inventory_targets
+        or any(
+            target.is_relative_to(directory.resolve())
+            for directory in shared_directories
+        )
+    )
+
+
+def _annotate_native_layers(
+    native_layers: list[PrecedenceLayer],
+    inventory_targets: set[Path],
+    shared_directories: list[Path],
+) -> tuple[list[PrecedenceLayer], set[Path]]:
+    """Mark shared symlinks and keep one resolving layer per loaded file.
+
+    Returns the annotated layers and the files they load.
+    """
+    layers: list[PrecedenceLayer] = []
+    loaded_targets: set[Path] = set()
+    for layer in native_layers:
+        if not isinstance(layer, ConsultedLayer) or not layer.exists:
+            layers.append(layer)
+            continue
+        path = Path(layer.file_path)
+        target = path.resolve()
+        update: dict[str, object] = {}
+        if _is_shared_symlink(path, inventory_targets, shared_directories):
+            update["symlink_target"] = str(target)
+        if layer.resolves and target in loaded_targets:
+            # A higher-precedence layer already loads this file.
+            update["resolves"] = False
+        elif layer.resolves:
+            loaded_targets.add(target)
+        layers.append(layer.model_copy(update=update))
+    return layers, loaded_targets
+
+
 @dataclass(kw_only=True)
 class DotAgentsAdapter:
     source: ClassVar[Source] = Source.DOT_AGENTS
@@ -104,34 +147,17 @@ class DotAgentsAdapter:
             if any(path.is_relative_to(directory) for directory in shared_directories)
         }
         inventory_targets = {path.resolve() for path in inventory_paths}
-        shared_roots = [directory.resolve() for directory in shared_directories]
 
-        layers: list[PrecedenceLayer] = []
-        alias_targets: set[Path] = set()
-        for layer in native.layers:
-            if not isinstance(layer, ConsultedLayer) or not layer.exists:
-                layers.append(layer)
-                continue
-
-            path = Path(layer.file_path)
-            target = path.resolve()
-            if path.absolute() == target or (
-                target not in inventory_targets
-                and not any(target.is_relative_to(root) for root in shared_roots)
-            ):
-                layers.append(layer)
-                continue
-
-            if layer.resolves:
-                alias_targets.add(target)
-            layers.append(layer.model_copy(update={"symlink_target": str(target)}))
+        layers, loaded_targets = _annotate_native_layers(
+            native.layers, inventory_targets, shared_directories
+        )
 
         native_paths = {Path(layer.file_path).absolute() for layer in native.layers}
         for layer in shared_layers:
             path = Path(layer.file_path)
             if path.absolute() in native_paths:
                 continue
-            if path in inventory_paths and path.resolve() in alias_targets:
+            if path in inventory_paths and path.resolve() in loaded_targets:
                 continue
             # Claude's native instruction discovery excludes .agents directories.
             # https://code.claude.com/docs/en/memory#when-claude-code-reads-agents-md

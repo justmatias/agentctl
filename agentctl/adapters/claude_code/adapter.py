@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
+from pydantic import BaseModel, Field, ValidationError
+
 from agentctl.adapters.common import (
     consulted_file_layer,
     dispatch_serializer,
@@ -33,6 +35,24 @@ from agentctl.domain import (
 from agentctl.utils import logger
 
 from .serializers import SERIALIZERS
+
+# Older Claude Code versions use the second ID; newer versions read either.
+# https://code.claude.com/docs/en/memory#when-claude-code-reads-agents-md
+AGENTS_MD_PLUGIN_IDS = ("cc-plugin-agents-md@builtin", "agents-md@builtin")
+
+
+class _InstructionFilesOptions(BaseModel):
+    instruction_files: str | None = Field(default=None, alias="instructionFiles")
+
+
+class _PluginConfig(BaseModel):
+    options: _InstructionFilesOptions = _InstructionFilesOptions()
+
+
+class _PluginSettings(BaseModel):
+    plugin_configs: dict[str, _PluginConfig] = Field(
+        default_factory=dict, alias="pluginConfigs"
+    )
 
 
 def default_managed_settings_path() -> Path:
@@ -91,6 +111,25 @@ class ClaudeCodeAdapter:
         # (non-worktree) checkout.
         slug = re.sub(r"[^A-Za-z0-9]", "-", str(project_root))
         return self.home / ".claude" / "projects" / slug / "memory" / "MEMORY.md"
+
+    def instruction_files_setting(self) -> str | None:
+        """The `instructionFiles` option, which Claude reads only from managed
+        and user settings, managed first."""
+        for path in (self.managed_settings_path, self.user_settings_path):
+            if not path.is_file():
+                continue
+            try:
+                settings = _PluginSettings.model_validate_json(
+                    path.read_text(encoding="utf-8")
+                )
+            except (OSError, UnicodeDecodeError, ValidationError) as exc:
+                logger.warning(f"Skipping unreadable settings in {path}: {exc}")
+                continue
+            for plugin_id in AGENTS_MD_PLUGIN_IDS:
+                plugin = settings.plugin_configs.get(plugin_id)
+                if plugin is not None and plugin.options.instruction_files is not None:
+                    return plugin.options.instruction_files
+        return None
 
     def locate_global_config(self) -> list[Path]:
         candidates = [
@@ -218,16 +257,35 @@ class ClaudeCodeAdapter:
             )
         )
         if project_root is not None:
-            # Direct AGENTS.md support depends on the Claude version and settings.
-            agents_path = project_root / "AGENTS.md"
             layers.append(
-                UnconfirmedLayer(
-                    scope=Scope.PROJECT,
-                    file_path=str(agents_path),
-                    exists=agents_path.is_file(),
+                consulted_file_layer(
+                    scope=Scope.USER,
+                    path=self.auto_memory_path(project_root),
                     origin=LayerOrigin.REGISTERED_PROJECT,
+                    order_rank=10,
                 )
             )
+            agents_path = project_root / "AGENTS.md"
+            if self.instruction_files_setting() == "claude-md-and-agents-md":
+                layers.append(
+                    consulted_file_layer(
+                        scope=Scope.PROJECT,
+                        path=agents_path,
+                        origin=LayerOrigin.REGISTERED_PROJECT,
+                        order_rank=11,
+                    )
+                )
+            else:
+                # Without that setting, direct AGENTS.md support depends on the
+                # Claude version and on whether a CLAUDE.md exists.
+                layers.append(
+                    UnconfirmedLayer(
+                        scope=Scope.PROJECT,
+                        file_path=str(agents_path),
+                        exists=agents_path.is_file(),
+                        origin=LayerOrigin.REGISTERED_PROJECT,
+                    )
+                )
         else:
             agents_path = self.home / "AGENTS.md"
             layers.append(

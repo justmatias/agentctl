@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -222,3 +223,63 @@ def expected_managed_settings_path(
     """Pretends to run on each operating system, yielding its managed settings path."""
     monkeypatch.setattr("platform.system", lambda: request.param)
     return EXPECTED_MANAGED_SETTINGS_PATHS[request.param]
+
+
+def _agents_md_plugin_settings(plugin_id: str) -> str:
+    return json.dumps({
+        "pluginConfigs": {
+            plugin_id: {"options": {"instructionFiles": "claude-md-and-agents-md"}}
+        }
+    })
+
+
+@pytest.fixture(
+    params=[
+        ("user", "cc-plugin-agents-md@builtin"),
+        ("managed", "cc-plugin-agents-md@builtin"),
+        ("user", "agents-md@builtin"),
+    ],
+    ids="-".join,
+)
+def _enable_agents_md_loading(
+    request: pytest.FixtureRequest, adapter: ClaudeCodeAdapter
+) -> None:
+    """Sets Claude to load AGENTS.md alongside CLAUDE.md from a scope it honors."""
+    location, plugin_id = request.param
+    path = (
+        adapter.user_settings_path
+        if location == "user"
+        else adapter.managed_settings_path
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_agents_md_plugin_settings(plugin_id), encoding="utf-8")
+
+
+@pytest.fixture
+def _enable_agents_md_loading_in_project_settings(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path
+) -> None:
+    path = adapter.project_settings_path(empty_project_root)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        _agents_md_plugin_settings("cc-plugin-agents-md@builtin"), encoding="utf-8"
+    )
+
+
+@pytest.fixture
+def auto_memory_file(adapter: ClaudeCodeAdapter, empty_project_root: Path) -> Path:
+    path = adapter.auto_memory_path(empty_project_root)
+    path.parent.mkdir(parents=True)
+    path.write_text("notes", encoding="utf-8")
+    return path
+
+
+@pytest.fixture(
+    params=[b"{not json", b"[1, 2, 3]", b"\xff\xfe"],
+    ids=["invalid_json", "not_object", "not_utf8"],
+)
+def _write_malformed_user_settings(
+    request: pytest.FixtureRequest, adapter: ClaudeCodeAdapter
+) -> None:
+    adapter.user_settings_path.parent.mkdir(parents=True)
+    adapter.user_settings_path.write_bytes(request.param)

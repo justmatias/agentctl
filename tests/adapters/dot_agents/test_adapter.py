@@ -235,3 +235,80 @@ def test_consumption_report_keeps_root_memory_unconfirmed_when_it_links_to_share
         if layer.file_path == str(project_root_memory_symlink)
     )
     assert layer.status == LayerStatus.UNCONFIRMED
+
+
+def test_consumption_report_records_symlink_target_when_claude_auto_memory_links_to_shared_memory(
+    empty_project_root: Path,
+    global_shared_memory: Path,
+    claude_auto_memory_symlink: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(
+        claude_code_adapter, empty_project_root
+    )
+
+    layer = next(
+        layer
+        for layer in chain.layers
+        if layer.file_path == str(claude_auto_memory_symlink)
+    )
+    assert isinstance(layer, ConsultedLayer)
+    assert layer.resolves
+    assert layer.symlink_target == str(global_shared_memory)
+
+
+@pytest.mark.usefixtures("claude_auto_memory_symlink")
+def test_consumption_report_omits_shared_memory_when_claude_auto_memory_links_to_it(
+    empty_project_root: Path,
+    global_shared_memory: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(
+        claude_code_adapter, empty_project_root
+    )
+
+    assert all(layer.file_path != str(global_shared_memory) for layer in chain.layers)
+
+
+@pytest.mark.usefixtures("_link_every_claude_instruction_path_to_shared")
+def test_consumption_report_resolves_shared_target_once_when_several_claude_paths_link_to_it(
+    empty_project_root: Path,
+    project_shared_instructions: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(
+        claude_code_adapter, empty_project_root
+    )
+
+    assert [
+        layer.file_path
+        for layer in chain.layers
+        if isinstance(layer, ConsultedLayer)
+        and layer.resolves
+        and layer.symlink_target == str(project_shared_instructions)
+    ] == [str(empty_project_root / "CLAUDE.local.md")]
+
+
+@pytest.mark.usefixtures(
+    "_link_claude_and_shared_instructions_to_root_agents_md",
+    "_enable_claude_agents_md_loading",
+)
+def test_consumption_report_resolves_file_once_when_claude_loads_it_through_symlink_and_directly(
+    empty_project_root: Path,
+    native_project_instructions: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(
+        claude_code_adapter, empty_project_root
+    )
+
+    assert [
+        layer.file_path
+        for layer in chain.layers
+        if layer.resolves
+        and Path(layer.file_path).resolve() == native_project_instructions
+    ] == [str(empty_project_root / "CLAUDE.md")]

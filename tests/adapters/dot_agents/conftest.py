@@ -106,3 +106,47 @@ def project_root_memory_symlink(
     path = empty_project_root / "MEMORY.md"
     path.symlink_to(project_shared_instructions)
     return path
+
+
+@pytest.fixture
+def claude_auto_memory_symlink(
+    empty_project_root: Path,
+    global_shared_memory: Path,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> Path:
+    path = claude_code_adapter.auto_memory_path(empty_project_root)
+    path.parent.mkdir(parents=True)
+    path.symlink_to(global_shared_memory)
+    return path
+
+
+@pytest.fixture
+def _link_every_claude_instruction_path_to_shared(
+    empty_project_root: Path, project_shared_instructions: Path
+) -> None:
+    for filename in ("CLAUDE.local.md", ".claude/CLAUDE.md", "CLAUDE.md"):
+        path = empty_project_root / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to(project_shared_instructions)
+
+
+@pytest.fixture
+def _link_claude_and_shared_instructions_to_root_agents_md(
+    empty_project_root: Path, native_project_instructions: Path
+) -> None:
+    """CLAUDE.md and `.agents/AGENTS.md` both alias the root AGENTS.md."""
+    for path in (
+        empty_project_root / "CLAUDE.md",
+        empty_project_root / ".agents" / "AGENTS.md",
+    ):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to(native_project_instructions)
+
+
+@pytest.fixture
+def _enable_claude_agents_md_loading(claude_code_adapter: ClaudeCodeAdapter) -> None:
+    write_file(
+        claude_code_adapter.user_settings_path,
+        '{"pluginConfigs": {"cc-plugin-agents-md@builtin": '
+        '{"options": {"instructionFiles": "claude-md-and-agents-md"}}}}',
+    )
