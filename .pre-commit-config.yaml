@@ -43,7 +43,7 @@ repos:
           - loguru==0.7.3
           - pydantic==2.13.5
           - pydantic-settings==2.15.0
-          - pytest==9.1.1
+          - pytest==9.2.0
           - polyfactory==3.3.0
           - sqlalchemy==2.1.4
           - sqlmodel==0.0.48
@@ -59,7 +59,7 @@ repos:
           - loguru==0.7.3
           - pydantic==2.13.5
           - pydantic-settings==2.15.0
-          - pytest==9.1.1
+          - pytest==9.2.0
           - polyfactory==3.3.0
           - sqlalchemy==2.1.4
           - sqlmodel==0.0.48
