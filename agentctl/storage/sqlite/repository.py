@@ -61,11 +61,7 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
         return [self._to_domain(row) for row in self._session.exec(query).all()]
 
     def update(self, item: DomainT) -> None:
-        statement = update(self._row_model)
-        for key in self._natural_key:
-            statement = statement.where(
-                self._column(key) == self._encode(getattr(item, key))
-            )
+        statement = update(self._row_model).where(*self._natural_key_clauses(item))
         self._write_in_transaction(
             [statement.values(**self._to_row(item))],
             message=f"Updated {self._entity_name} {self._identity(item)}",
@@ -74,7 +70,7 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
     def upsert(self, item: DomainT) -> None:
         self._write_in_transaction(
             [
-                self._natural_key_delete(item),
+                delete(self._row_model).where(*self._natural_key_clauses(item)),
                 insert(self._row_model).values(**self._to_row(item)),
             ],
             message=f"Upserted {self._entity_name} {self._identity(item)}",
@@ -92,13 +88,10 @@ class SqliteRepository[DomainT: BaseModel, RowT: SQLModel]:
             message=f"Deleted {self._entity_name} ({filters})",
         )
 
-    def _natural_key_delete(self, item: DomainT) -> Executable:
-        statement = delete(self._row_model)
-        for key in self._natural_key:
-            statement = statement.where(
-                self._column(key) == self._encode(getattr(item, key))
-            )
-        return statement
+    def _natural_key_clauses(self, item: DomainT) -> tuple[ColumnElement[bool], ...]:
+        return tuple(
+            self._filter_clause(key, getattr(item, key)) for key in self._natural_key
+        )
 
     def _identity(self, item: DomainT) -> str:
         values = [str(getattr(item, key)) for key in self._natural_key]
