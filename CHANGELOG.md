@@ -2,6 +2,73 @@
 
 <!-- version list -->
 
+## v16.2.0 (2026-11-23)
+
+### Chores
+
+- **config**: Update pre-commit hooks ([#113](https://github.com/justmatias/agentctl/pull/113),
+  [`9aa7bc8`](https://github.com/justmatias/agentctl/commit/9aa7bc8c5c8c517dffc5ce896fe130aaa88ca0ad))
+
+- **config**: Update pre-commit hooks ([#116](https://github.com/justmatias/agentctl/pull/116),
+  [`8cf7b40`](https://github.com/justmatias/agentctl/commit/8cf7b40c752177a853a29c728bb9729320310347))
+
+- **config**: Update pre-commit hooks ([#112](https://github.com/justmatias/agentctl/pull/112),
+  [`5b1b6fc`](https://github.com/justmatias/agentctl/commit/5b1b6fc857d2e352856c0e4017f0226b6785a127))
+
+- **deps**: Bump loguru from 0.7.3 to 0.8.0
+  ([#112](https://github.com/justmatias/agentctl/pull/112),
+  [`5b1b6fc`](https://github.com/justmatias/agentctl/commit/5b1b6fc857d2e352856c0e4017f0226b6785a127))
+
+- **deps**: Bump pydantic-settings from 2.15.0 to 2.16.3
+  ([#113](https://github.com/justmatias/agentctl/pull/113),
+  [`9aa7bc8`](https://github.com/justmatias/agentctl/commit/9aa7bc8c5c8c517dffc5ce896fe130aaa88ca0ad))
+
+- **deps-dev**: Bump build from 1.6.0 to 1.6.1
+  ([#114](https://github.com/justmatias/agentctl/pull/114),
+  [`e1fcf7c`](https://github.com/justmatias/agentctl/commit/e1fcf7cd97e2356f79924ef7d648c1f693dfd172))
+
+- **deps-dev**: Bump pre-commit from 4.6.2 to 4.7.0
+  ([#115](https://github.com/justmatias/agentctl/pull/115),
+  [`095bfc7`](https://github.com/justmatias/agentctl/commit/095bfc760dea693ac21be102b70dfcc5705f84ae))
+
+- **deps-dev**: Bump pytest from 9.1.1 to 9.2.0
+  ([#116](https://github.com/justmatias/agentctl/pull/116),
+  [`8cf7b40`](https://github.com/justmatias/agentctl/commit/8cf7b40c752177a853a29c728bb9729320310347))
+
+### Features
+
+- **adapters**: Discover shared agent instructions and memory
+  ([`3d180f1`](https://github.com/justmatias/agentctl/commit/3d180f1775ab066f71d7a88cf728cf4295afd581))
+
+### Refactoring
+
+- Share CLI output and SQLite key matching ([#117](https://github.com/justmatias/agentctl/pull/117),
+  [`0b675e2`](https://github.com/justmatias/agentctl/commit/0b675e2e9e2133bf5ed7868311ba20a884719d14))
+
+- **adapters**: Apply shared discovery review feedback
+  ([`5f1d890`](https://github.com/justmatias/agentctl/commit/5f1d8901da2add2d691c531ef19faefc5a57cdb7))
+
+- **adapters**: Flatten shared symlink reporting
+  ([`c6b0a6c`](https://github.com/justmatias/agentctl/commit/c6b0a6c9712ce876c95fa0cafe5acef7e38b5a8b))
+
+- **adapters**: Keep review changes within lint limits
+  ([`f28bd3d`](https://github.com/justmatias/agentctl/commit/f28bd3d5de0e99215eebe6a80d69cd0fa42d0644))
+
+- **cli**: Centralize placeholder output ([#117](https://github.com/justmatias/agentctl/pull/117),
+  [`0b675e2`](https://github.com/justmatias/agentctl/commit/0b675e2e9e2133bf5ed7868311ba20a884719d14))
+
+- **storage**: Share natural key predicates
+  ([#117](https://github.com/justmatias/agentctl/pull/117),
+  [`0b675e2`](https://github.com/justmatias/agentctl/commit/0b675e2e9e2133bf5ed7868311ba20a884719d14))
+
+- **writes**: Restore inline backup handling
+  ([#117](https://github.com/justmatias/agentctl/pull/117),
+  [`0b675e2`](https://github.com/justmatias/agentctl/commit/0b675e2e9e2133bf5ed7868311ba20a884719d14))
+
+- **writes**: Share backup restoration ([#117](https://github.com/justmatias/agentctl/pull/117),
+  [`0b675e2`](https://github.com/justmatias/agentctl/commit/0b675e2e9e2133bf5ed7868311ba20a884719d14))
+
+
 ## v16.1.1 (2026-11-22)
 
 ### Bug Fixes
