@@ -1,5 +1,7 @@
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+from itertools import count
 from pathlib import Path
 from typing import ClassVar
 
@@ -122,8 +124,8 @@ class ClaudeCodeAdapter:
                 setting = _InstructionFilesSetting.model_validate_json(
                     path.read_text(encoding="utf-8")
                 )
-            except (OSError, UnicodeDecodeError, ValidationError) as exc:
-                logger.warning(f"Skipping unreadable settings in {path}: {exc}")
+            except (OSError, UnicodeDecodeError, ValidationError) as error:
+                logger.warning(f"Skipping unreadable settings in {path}: {error}")
                 continue
             if setting.value is not None:
                 return setting.value
@@ -184,6 +186,29 @@ class ClaudeCodeAdapter:
             merge_semantics=MergeSemantics.OVERRIDE,
         )
 
+    def _project_agents_md_layer(
+        self, project_root: Path, ranks: Iterator[int]
+    ) -> PrecedenceLayer:
+        """The project AGENTS.md layer, as the `instructionFiles` setting decides."""
+        path = project_root / "AGENTS.md"
+        setting = self.instruction_files_setting()
+        if setting == "claude-md-and-agents-md":
+            return consulted_file_layer(
+                scope=Scope.PROJECT,
+                path=path,
+                origin=LayerOrigin.REGISTERED_PROJECT,
+                order_rank=next(ranks),
+            )
+        layer_type = NotConsultedLayer if setting == "claude-md" else UnconfirmedLayer
+        # The default loads AGENTS.md only when no CLAUDE.md exists, and its
+        # support depends on the Claude version, so it stays unconfirmed.
+        return layer_type(
+            scope=Scope.PROJECT,
+            file_path=str(path),
+            exists=path.is_file(),
+            origin=LayerOrigin.REGISTERED_PROJECT,
+        )
+
     def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
         layers: list[PrecedenceLayer] = [
             consulted_file_layer(
@@ -234,24 +259,25 @@ class ClaudeCodeAdapter:
         )
 
         # https://code.claude.com/docs/en/memory#choose-where-to-put-claude-md-files
+        ranks = count(6)
         if project_root is not None:
             layers.extend(
                 consulted_file_layer(
                     scope=Scope.PROJECT,
                     path=project_root / filename,
                     origin=LayerOrigin.REGISTERED_PROJECT,
-                    order_rank=rank,
+                    order_rank=next(ranks),
                 )
-                for rank, filename in enumerate(
-                    ("CLAUDE.local.md", ".claude/CLAUDE.md", "CLAUDE.md"), start=6
-                )
+                for filename in ("CLAUDE.local.md", ".claude/CLAUDE.md", "CLAUDE.md")
             )
+            # A directory's AGENTS.md loads right after its CLAUDE.md files.
+            layers.append(self._project_agents_md_layer(project_root, ranks))
         layers.append(
             consulted_file_layer(
                 scope=Scope.USER,
                 path=self.home / ".claude" / "CLAUDE.md",
                 origin=LayerOrigin.GLOBAL,
-                order_rank=9,
+                order_rank=next(ranks),
             )
         )
         if project_root is not None:
@@ -260,30 +286,9 @@ class ClaudeCodeAdapter:
                     scope=Scope.USER,
                     path=self.auto_memory_path(project_root),
                     origin=LayerOrigin.REGISTERED_PROJECT,
-                    order_rank=10,
+                    order_rank=next(ranks),
                 )
             )
-            agents_path = project_root / "AGENTS.md"
-            if self.instruction_files_setting() == "claude-md-and-agents-md":
-                layers.append(
-                    consulted_file_layer(
-                        scope=Scope.PROJECT,
-                        path=agents_path,
-                        origin=LayerOrigin.REGISTERED_PROJECT,
-                        order_rank=11,
-                    )
-                )
-            else:
-                # Without that setting, direct AGENTS.md support depends on the
-                # Claude version and on whether a CLAUDE.md exists.
-                layers.append(
-                    UnconfirmedLayer(
-                        scope=Scope.PROJECT,
-                        file_path=str(agents_path),
-                        exists=agents_path.is_file(),
-                        origin=LayerOrigin.REGISTERED_PROJECT,
-                    )
-                )
         else:
             agents_path = self.home / "AGENTS.md"
             layers.append(

@@ -312,3 +312,23 @@ def test_consumption_report_resolves_file_once_when_claude_loads_it_through_syml
         if layer.resolves
         and Path(layer.file_path).resolve() == native_project_instructions
     ] == [str(empty_project_root / "CLAUDE.md")]
+
+
+@pytest.mark.usefixtures("project_shared_memory")
+def test_consumption_report_leaves_symlink_target_unset_when_claude_md_links_outside_shared_files(
+    empty_project_root: Path,
+    claude_md_symlink_to_root_agents_md: Path,
+    dot_agents_adapter: DotAgentsAdapter,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> None:
+    chain = dot_agents_adapter.consumption_report(
+        claude_code_adapter, empty_project_root
+    )
+
+    layer = next(
+        layer
+        for layer in chain.layers
+        if layer.file_path == str(claude_md_symlink_to_root_agents_md)
+    )
+    assert isinstance(layer, ConsultedLayer)
+    assert layer.symlink_target is None

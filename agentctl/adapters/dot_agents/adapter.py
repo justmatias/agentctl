@@ -90,49 +90,66 @@ class DotAgentsAdapter:
         return PrecedenceChain(source=self.source, layers=layers)
 
     @staticmethod
-    def _is_shared_symlink(
+    def _shared_symlink_target(
         path: Path, inventory_targets: set[Path], shared_directories: list[Path]
-    ) -> bool:
-        """Whether `path` is a symlink into the shared inventory or directories."""
+    ) -> Path | None:
+        """The shared file `path` links to, or None when it is not such a link."""
         target = path.resolve()
-        return path.absolute() != target and (
-            target in inventory_targets
-            or any(
-                target.is_relative_to(directory.resolve())
-                for directory in shared_directories
-            )
-        )
-
+        if path.absolute() == target:
+            return None
+        if target in inventory_targets or any(
+            target.is_relative_to(directory.resolve())
+            for directory in shared_directories
+        ):
+            return target
+        return None
 
     @classmethod
-    def _annotate_native_layers(
+    def _mark_shared_symlinks(
         cls,
         native_layers: list[PrecedenceLayer],
         inventory_targets: set[Path],
         shared_directories: list[Path],
-    ) -> tuple[list[PrecedenceLayer], set[Path]]:
-        """Mark shared symlinks and keep one resolving layer per loaded file.
-
-        Returns the annotated layers and the files they load.
-        """
+    ) -> list[PrecedenceLayer]:
+        """Record the shared target of each existing consulted layer that links to one."""
         layers: list[PrecedenceLayer] = []
-        loaded_targets: set[Path] = set()
         for layer in native_layers:
-            if not isinstance(layer, ConsultedLayer) or not layer.exists:
-                layers.append(layer)
+            target = (
+                cls._shared_symlink_target(
+                    Path(layer.file_path), inventory_targets, shared_directories
+                )
+                if isinstance(layer, ConsultedLayer) and layer.exists
+                else None
+            )
+            layers.append(
+                layer
+                if target is None
+                else layer.model_copy(update={"symlink_target": str(target)})
+            )
+        return layers
+
+    @staticmethod
+    def _resolve_each_file_once(
+        layers: list[PrecedenceLayer],
+    ) -> tuple[list[PrecedenceLayer], set[Path]]:
+        """Keep only the highest-precedence resolving layer for each loaded file.
+
+        Returns the layers and the files they load.
+        """
+        deduplicated: list[PrecedenceLayer] = []
+        loaded_targets: set[Path] = set()
+        for layer in layers:
+            if not layer.resolves:
+                deduplicated.append(layer)
                 continue
-            path = Path(layer.file_path)
-            target = path.resolve()
-            update: dict[str, object] = {}
-            if cls._is_shared_symlink(path, inventory_targets, shared_directories):
-                update["symlink_target"] = str(target)
-            if layer.resolves and target in loaded_targets:
-                # A higher-precedence layer already loads this file.
-                update["resolves"] = False
-            elif layer.resolves:
-                loaded_targets.add(target)
-            layers.append(layer.model_copy(update=update))
-        return layers, loaded_targets
+            target = Path(layer.file_path).resolve()
+            deduplicated.append(
+                layer.model_copy(update={"resolves": False})
+                if target in loaded_targets
+                else layer
+            )
+            loaded_targets.add(target)
+        return deduplicated, loaded_targets
 
     def consumption_report(
         self, harness: SourceAdapter, project_root: Path | None
@@ -150,8 +167,10 @@ class DotAgentsAdapter:
         }
         inventory_targets = {path.resolve() for path in inventory_paths}
 
-        layers, loaded_targets = self._annotate_native_layers(
-            native.layers, inventory_targets, shared_directories
+        layers, loaded_targets = self._resolve_each_file_once(
+            self._mark_shared_symlinks(
+                native.layers, inventory_targets, shared_directories
+            )
         )
 
         native_paths = {Path(layer.file_path).absolute() for layer in native.layers}

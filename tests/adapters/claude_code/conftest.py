@@ -9,7 +9,7 @@ from agentctl.adapters import (
     WalkUpStop,
 )
 from agentctl.domain import Extension, ExtensionType, McpServerConfig, Source
-from tests.adapters.claude_code.helpers import agents_md_plugin_settings
+from tests.adapters.helpers import render_instruction_files_settings_json
 from tests.adapters.scenarios import copy_fixture_scenario
 
 MALFORMED_SETTINGS_CONTENT = {
@@ -227,9 +227,9 @@ def expected_managed_settings_path(
 
 @pytest.fixture(
     params=[
-        ("user", "cc-plugin-agents-md@builtin"),
-        ("managed", "cc-plugin-agents-md@builtin"),
-        ("user", "agents-md@builtin"),
+        ("user_settings_path", "cc-plugin-agents-md@builtin"),
+        ("managed_settings_path", "cc-plugin-agents-md@builtin"),
+        ("user_settings_path", "agents-md@builtin"),
     ],
     ids="-".join,
 )
@@ -237,14 +237,21 @@ def _enable_agents_md_loading(
     request: pytest.FixtureRequest, adapter: ClaudeCodeAdapter
 ) -> None:
     """Sets Claude to load AGENTS.md alongside CLAUDE.md from a scope it honors."""
-    location, plugin_id = request.param
-    path = (
-        adapter.user_settings_path
-        if location == "user"
-        else adapter.managed_settings_path
-    )
+    settings_path_attribute, plugin_id = request.param
+    path: Path = getattr(adapter, settings_path_attribute)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(agents_md_plugin_settings(plugin_id), encoding="utf-8")
+    path.write_text(
+        render_instruction_files_settings_json(plugin_id=plugin_id), encoding="utf-8"
+    )
+
+
+@pytest.fixture
+def _exclude_agents_md_loading(adapter: ClaudeCodeAdapter) -> None:
+    """Sets Claude to an instruction-files mode that never loads AGENTS.md."""
+    adapter.user_settings_path.parent.mkdir(parents=True)
+    adapter.user_settings_path.write_text(
+        render_instruction_files_settings_json("claude-md"), encoding="utf-8"
+    )
 
 
 @pytest.fixture
@@ -253,9 +260,12 @@ def _enable_agents_md_loading_in_project_settings(
 ) -> None:
     path = adapter.project_settings_path(empty_project_root)
     path.parent.mkdir(parents=True)
-    path.write_text(
-        agents_md_plugin_settings(), encoding="utf-8"
-    )
+    path.write_text(render_instruction_files_settings_json(), encoding="utf-8")
+
+
+@pytest.fixture
+def project_agents_md_path(empty_project_root: Path) -> Path:
+    return empty_project_root / "AGENTS.md"
 
 
 @pytest.fixture
