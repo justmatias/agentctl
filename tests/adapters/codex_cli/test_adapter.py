@@ -20,7 +20,7 @@ from agentctl.domain import (
 )
 
 
-def test_adapter_implements_the_source_adapter_protocol(
+def test_adapter_implements_the_source_protocol_when_instantiated(
     adapter: CodexCliAdapter,
 ) -> None:
     assert isinstance(adapter, SourceAdapter)
@@ -44,7 +44,7 @@ def test_locate_project_config_finds_nothing_when_nothing_installed(
     assert located == []
 
 
-def test_locate_global_config_finds_every_global_scope_file(
+def test_locate_global_config_finds_user_files_when_present(
     global_only_adapter: CodexCliAdapter,
 ) -> None:
     codex_home = global_only_adapter.codex_home
@@ -87,7 +87,7 @@ def test_global_instructions_fall_back_to_base_when_override_is_blank(
 
 
 @pytest.mark.usefixtures("_write_machine_wide_configs")
-def test_locate_global_config_finds_administrator_owned_config(
+def test_locate_global_config_finds_administrator_owned_config_when_present(
     adapter: CodexCliAdapter,
 ) -> None:
     assert set(adapter.locate_global_config()) == {
@@ -96,7 +96,7 @@ def test_locate_global_config_finds_administrator_owned_config(
     }
 
 
-def test_locate_project_config_finds_every_project_scope_file(
+def test_locate_project_config_finds_project_files_when_present(
     global_and_project_adapter: CodexCliAdapter,
     global_and_project_project_root: Path,
 ) -> None:
@@ -147,7 +147,7 @@ def test_parse_returns_nothing_when_base_instructions_are_shadowed(
     assert global_and_project_adapter.parse(base) == []
 
 
-def test_parse_extracts_mcp_server_from_config_toml(
+def test_parse_extracts_mcp_server_when_config_toml_declares_one(
     global_only_adapter: CodexCliAdapter,
 ) -> None:
     extensions = global_only_adapter.parse(
@@ -169,7 +169,7 @@ def test_parse_extracts_mcp_server_from_config_toml(
     assert canonical.env == {"CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"}
 
 
-def test_parse_ignores_tables_that_are_not_mcp_servers(
+def test_parse_extracts_only_mcp_servers_when_other_tables_exist(
     global_only_adapter: CodexCliAdapter,
 ) -> None:
     """Top-level keys, arrays of tables (`[[hooks.SessionStart]]`) and nested
@@ -194,7 +194,7 @@ def test_parse_extracts_the_same_mcp_server_when_toml_spells_it_differently(
     assert canonical.env == {"TOKEN": "secret"}
 
 
-def test_parse_extracts_mcp_server_with_remote_transport(
+def test_parse_extracts_remote_transport_when_config_declares_a_url(
     global_and_project_adapter: CodexCliAdapter,
     global_and_project_project_root: Path,
 ) -> None:
@@ -218,7 +218,7 @@ def test_parse_returns_nothing_when_config_has_no_mcp_servers(
     assert not adapter.parse(config_path)
 
 
-def test_parse_extracts_project_instructions_file(
+def test_parse_extracts_project_instructions_when_base_file_exists(
     global_and_project_adapter: CodexCliAdapter,
     global_and_project_project_root: Path,
 ) -> None:
@@ -236,7 +236,7 @@ def test_parse_extracts_project_instructions_file(
     assert "Run `make test` before committing." in canonical.content
 
 
-def test_parse_extracts_instructions_override_file(
+def test_parse_extracts_override_instructions_when_override_file_exists(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
     override_path = global_and_project_adapter.codex_home / "AGENTS.override.md"
@@ -306,7 +306,9 @@ def test_serialized_mcp_server_round_trips_through_parse_when_reparsed(
     assert reparsed[0].canonical_config == mcp_server_extension.canonical_config
 
 
-def test_serialize_memory_file_returns_raw_content(adapter: CodexCliAdapter) -> None:
+def test_serialize_returns_raw_content_when_extension_is_a_memory_file(
+    adapter: CodexCliAdapter,
+) -> None:
     canonical = MemoryFileConfig(content="# Hello\n", is_persistent_memory=False)
     extension = Extension(name="AGENTS.md", canonical_config=canonical)
 
@@ -322,7 +324,7 @@ def test_walk_up_behavior_matches_codex_contract_when_extension_type_varies(
     assert adapter.walk_up_behavior(extension_type) == expected
 
 
-def test_capabilities_declares_the_types_and_scopes_codex_has(
+def test_capabilities_reports_supported_types_and_scopes_when_accessed(
     adapter: CodexCliAdapter,
 ) -> None:
     capabilities = adapter.capabilities
@@ -369,7 +371,7 @@ def test_precedence_chain_numbers_layers_consecutively_when_project_given(
     assert [layer.order_rank for layer in chain.layers] == list(range(1, 10))  # type: ignore[union-attr]
 
 
-def test_precedence_chain_tags_project_layers_with_their_origin(
+def test_precedence_chain_tags_registered_origins_when_project_root_is_given(
     global_and_project_adapter: CodexCliAdapter,
     global_and_project_project_root: Path,
 ) -> None:
@@ -382,7 +384,7 @@ def test_precedence_chain_tags_project_layers_with_their_origin(
     )
 
 
-def test_precedence_chain_omits_project_layers_for_the_global_view(
+def test_precedence_chain_omits_project_layers_when_project_root_is_absent(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
     chain = global_and_project_adapter.precedence_chain(None)
@@ -407,7 +409,7 @@ def test_command_line_argument_layer_never_resolves_when_scanned_statically(
 
 
 @pytest.mark.usefixtures("_write_machine_wide_configs")
-def test_precedence_chain_reports_administrator_owned_config_as_existing(
+def test_precedence_chain_reports_administrator_owned_config_when_present(
     adapter: CodexCliAdapter,
 ) -> None:
     chain = adapter.precedence_chain(None)
@@ -420,7 +422,7 @@ def test_precedence_chain_reports_administrator_owned_config_as_existing(
     assert all(layer.exists and layer.resolves for layer in managed_layers)
 
 
-def test_instructions_override_shadows_the_agents_file_beside_it(
+def test_base_instructions_do_not_resolve_when_override_exists(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
     """Codex reads at most one instructions file per directory, so the user's
@@ -463,7 +465,7 @@ def test_managed_config_path_follows_platform_when_operating_system_varies(
     assert adapter.managed_config_path == expected_managed_config_path
 
 
-def test_default_codex_home_honors_the_codex_home_variable(
+def test_default_codex_home_uses_environment_path_when_variable_is_set(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "elsewhere"))
@@ -471,7 +473,7 @@ def test_default_codex_home_honors_the_codex_home_variable(
     assert default_codex_home() == tmp_path / "elsewhere"
 
 
-def test_default_codex_home_falls_back_to_the_dot_codex_directory(
+def test_default_codex_home_uses_dot_codex_when_variable_is_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("CODEX_HOME", raising=False)
