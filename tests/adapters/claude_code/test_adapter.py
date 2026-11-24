@@ -15,6 +15,7 @@ from agentctl.domain import (
     ExtensionType,
     McpServerConfig,
     MemoryFileConfig,
+    NotConsultedLayer,
     Scope,
     SkillConfig,
     Source,
@@ -368,3 +369,111 @@ def test_default_managed_settings_path_is_operating_system_specific(
     expected_managed_settings_path: Path,
 ) -> None:
     assert default_managed_settings_path() == expected_managed_settings_path
+
+
+def test_precedence_chain_consults_auto_memory_when_project_is_given(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, auto_memory_file: Path
+) -> None:
+    chain = adapter.precedence_chain(empty_project_root)
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(auto_memory_file)
+    )
+    assert isinstance(layer, ConsultedLayer)
+    assert layer.resolves
+
+
+@pytest.mark.usefixtures("_enable_agents_md_loading")
+def test_precedence_chain_consults_agents_md_when_settings_load_both_instruction_files(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, project_agents_md_path: Path
+) -> None:
+    chain = adapter.precedence_chain(empty_project_root)
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(project_agents_md_path)
+    )
+    assert isinstance(layer, ConsultedLayer)
+
+
+@pytest.mark.usefixtures("_enable_agents_md_loading_in_project_settings")
+def test_precedence_chain_keeps_agents_md_unconfirmed_when_only_project_settings_load_it(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, project_agents_md_path: Path
+) -> None:
+    chain = adapter.precedence_chain(empty_project_root)
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(project_agents_md_path)
+    )
+    assert isinstance(layer, UnconfirmedLayer)
+
+
+@pytest.mark.usefixtures("_write_malformed_user_settings")
+def test_precedence_chain_keeps_agents_md_unconfirmed_when_user_settings_are_malformed(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, project_agents_md_path: Path
+) -> None:
+    chain = adapter.precedence_chain(empty_project_root)
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(project_agents_md_path)
+    )
+    assert isinstance(layer, UnconfirmedLayer)
+
+
+@pytest.mark.usefixtures("_exclude_agents_md_loading")
+def test_precedence_chain_reports_agents_md_as_not_consulted_when_settings_exclude_it(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, project_agents_md_path: Path
+) -> None:
+    chain = adapter.precedence_chain(empty_project_root)
+
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(project_agents_md_path)
+    )
+    assert isinstance(layer, NotConsultedLayer)
+
+
+@pytest.mark.usefixtures("_enable_agents_md_loading")
+def test_precedence_chain_ranks_agents_md_right_after_project_claude_md_when_settings_load_both(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, project_agents_md_path: Path
+) -> None:
+    chain = adapter.precedence_chain(empty_project_root)
+
+    ranks = {
+        layer.file_path: layer.order_rank
+        for layer in chain.layers
+        if isinstance(layer, ConsultedLayer)
+    }
+    assert (
+        ranks[str(project_agents_md_path)]
+        == ranks[str(empty_project_root / "CLAUDE.md")] + 1
+    )
+
+
+def test_precedence_chain_skips_auto_memory_when_disabled(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, auto_memory_file: Path
+) -> None:
+    adapter.user_settings_path.write_text('{"autoMemoryEnabled": false}')
+
+    chain = adapter.precedence_chain(empty_project_root)
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(auto_memory_file)
+    )
+
+    assert isinstance(layer, NotConsultedLayer)
+
+
+def test_precedence_chain_skips_agents_md_when_its_plugin_is_disabled(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, project_agents_md_path: Path
+) -> None:
+    adapter.user_settings_path.parent.mkdir(parents=True, exist_ok=True)
+    adapter.user_settings_path.write_text(
+        '{"enabledPlugins":{"cc-plugin-agents-md@builtin":false},'
+        '"pluginConfigs":{"cc-plugin-agents-md@builtin":{"options":'
+        '{"instructionFiles":"claude-md-and-agents-md"}}}}'
+    )
+
+    chain = adapter.precedence_chain(empty_project_root)
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(project_agents_md_path)
+    )
+
+    assert isinstance(layer, NotConsultedLayer)

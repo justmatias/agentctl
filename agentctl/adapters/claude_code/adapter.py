@@ -1,7 +1,11 @@
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+from itertools import count
 from pathlib import Path
 from typing import ClassVar
+
+from pydantic import AliasChoices, AliasPath, BaseModel, Field, ValidationError
 
 from agentctl.adapters.common import (
     consulted_file_layer,
@@ -33,6 +37,39 @@ from agentctl.domain import (
 from agentctl.utils import logger
 
 from .serializers import SERIALIZERS
+
+AGENTS_MD_PLUGIN_IDS = ("cc-plugin-agents-md@builtin", "agents-md@builtin")
+
+
+class InstructionFilesSetting(BaseModel):
+    """The `instructionFiles` option of Claude's built-in AGENTS.md plugin.
+
+    Older Claude Code versions use the second plugin ID; newer ones read either.
+    https://code.claude.com/docs/en/memory#when-claude-code-reads-agents-md
+    """
+
+    value: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            *(
+                AliasPath("pluginConfigs", plugin_id, "options", "instructionFiles")
+                for plugin_id in AGENTS_MD_PLUGIN_IDS
+            )
+        ),
+    )
+
+
+class AutoMemorySetting(BaseModel):
+    enabled: bool | None = Field(default=None, validation_alias="autoMemoryEnabled")
+
+
+class AgentsMdPluginSetting(BaseModel):
+    enabled: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            *(AliasPath("enabledPlugins", plugin_id) for plugin_id in AGENTS_MD_PLUGIN_IDS)
+        ),
+    )
 
 
 def default_managed_settings_path() -> Path:
@@ -92,6 +129,30 @@ class ClaudeCodeAdapter:
         slug = re.sub(r"[^A-Za-z0-9]", "-", str(project_root))
         return self.home / ".claude" / "projects" / slug / "memory" / "MEMORY.md"
 
+    @staticmethod
+    def _read_settings[Settings: BaseModel](
+        path: Path, model: type[Settings]
+    ) -> Settings | None:
+        try:
+            if not path.is_file():
+                return None
+            return model.model_validate_json(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, UnicodeDecodeError, ValidationError) as error:
+            logger.warning(f"Skipping unreadable settings in {path}: {type(error).__name__}")
+            return None
+
+    @property
+    def instruction_files_setting(self) -> str | None:
+        """The `instructionFiles` option, which Claude reads only from managed
+        and user settings, managed first."""
+        for path in (self.managed_settings_path, self.user_settings_path):
+            setting = self._read_settings(path, InstructionFilesSetting)
+            if setting is not None and setting.value is not None:
+                return setting.value
+        return None
+
     def locate_global_config(self) -> list[Path]:
         candidates = [
             self.home / ".claude.json",
@@ -147,6 +208,51 @@ class ClaudeCodeAdapter:
             merge_semantics=MergeSemantics.OVERRIDE,
         )
 
+    @property
+    def agents_md_plugin_enabled(self) -> bool:
+        for path in (self.managed_settings_path, self.user_settings_path):
+            setting = self._read_settings(path, AgentsMdPluginSetting)
+            if setting is not None and setting.enabled is not None:
+                return setting.enabled
+        return True
+
+    def _project_agents_md_layer(
+        self, project_root: Path, ranks: Iterator[int]
+    ) -> PrecedenceLayer:
+        """The project AGENTS.md layer, as the `instructionFiles` setting decides."""
+        path = project_root / "AGENTS.md"
+        setting = (
+            self.instruction_files_setting if self.agents_md_plugin_enabled else "claude-md"
+        )
+        if setting == "claude-md-and-agents-md":
+            return consulted_file_layer(
+                scope=Scope.PROJECT,
+                path=path,
+                origin=LayerOrigin.REGISTERED_PROJECT,
+                order_rank=next(ranks),
+            )
+        layer_type = NotConsultedLayer if setting == "claude-md" else UnconfirmedLayer
+        # The default loads AGENTS.md only when no CLAUDE.md exists, and its
+        # support depends on the Claude version, so it stays unconfirmed.
+        return layer_type(
+            scope=Scope.PROJECT,
+            file_path=str(path),
+            exists=path.is_file(),
+            origin=LayerOrigin.REGISTERED_PROJECT,
+        )
+
+    def auto_memory_enabled(self, project_root: Path) -> bool:
+        for path in (
+            self.managed_settings_path,
+            self.local_settings_path(project_root),
+            self.project_settings_path(project_root),
+            self.user_settings_path,
+        ):
+            setting = self._read_settings(path, AutoMemorySetting)
+            if setting is not None and setting.enabled is not None:
+                return setting.enabled
+        return True
+
     def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
         layers: list[PrecedenceLayer] = [
             consulted_file_layer(
@@ -197,37 +303,47 @@ class ClaudeCodeAdapter:
         )
 
         # https://code.claude.com/docs/en/memory#choose-where-to-put-claude-md-files
+        ranks = count(6)
         if project_root is not None:
             layers.extend(
                 consulted_file_layer(
                     scope=Scope.PROJECT,
                     path=project_root / filename,
                     origin=LayerOrigin.REGISTERED_PROJECT,
-                    order_rank=rank,
+                    order_rank=next(ranks),
                 )
-                for rank, filename in enumerate(
-                    ("CLAUDE.local.md", ".claude/CLAUDE.md", "CLAUDE.md"), start=6
-                )
+                for filename in ("CLAUDE.local.md", ".claude/CLAUDE.md", "CLAUDE.md")
             )
+            # A directory's AGENTS.md loads right after its CLAUDE.md files.
+            layers.append(self._project_agents_md_layer(project_root, ranks))
         layers.append(
             consulted_file_layer(
                 scope=Scope.USER,
                 path=self.home / ".claude" / "CLAUDE.md",
                 origin=LayerOrigin.GLOBAL,
-                order_rank=9,
+                order_rank=next(ranks),
             )
         )
         if project_root is not None:
-            # Direct AGENTS.md support depends on the Claude version and settings.
-            agents_path = project_root / "AGENTS.md"
-            layers.append(
-                UnconfirmedLayer(
-                    scope=Scope.PROJECT,
-                    file_path=str(agents_path),
-                    exists=agents_path.is_file(),
-                    origin=LayerOrigin.REGISTERED_PROJECT,
+            memory_path = self.auto_memory_path(project_root)
+            if self.auto_memory_enabled(project_root):
+                layers.append(
+                    consulted_file_layer(
+                        scope=Scope.USER,
+                        path=memory_path,
+                        origin=LayerOrigin.REGISTERED_PROJECT,
+                        order_rank=next(ranks),
+                    )
                 )
-            )
+            else:
+                layers.append(
+                    NotConsultedLayer(
+                        scope=Scope.USER,
+                        file_path=str(memory_path),
+                        exists=memory_path.is_file(),
+                        origin=LayerOrigin.REGISTERED_PROJECT,
+                    )
+                )
         else:
             agents_path = self.home / "AGENTS.md"
             layers.append(

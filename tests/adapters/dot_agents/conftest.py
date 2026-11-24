@@ -4,6 +4,7 @@ import pytest
 
 from agentctl.adapters import ClaudeCodeAdapter, CodexCliAdapter, DotAgentsAdapter
 from tests.adapters.dot_agents.helpers import write_file
+from tests.adapters.helpers import render_instruction_files_settings_json
 
 
 @pytest.fixture
@@ -105,4 +106,49 @@ def project_root_memory_symlink(
 ) -> Path:
     path = empty_project_root / "MEMORY.md"
     path.symlink_to(project_shared_instructions)
+    return path
+
+
+@pytest.fixture
+def claude_auto_memory_symlink(
+    empty_project_root: Path,
+    global_shared_memory: Path,
+    claude_code_adapter: ClaudeCodeAdapter,
+) -> Path:
+    path = claude_code_adapter.auto_memory_path(empty_project_root)
+    path.parent.mkdir(parents=True)
+    path.symlink_to(global_shared_memory)
+    return path
+
+
+@pytest.fixture
+def _link_every_claude_instruction_path_to_shared(
+    empty_project_root: Path, project_shared_instructions: Path
+) -> None:
+    for filename in ("CLAUDE.local.md", ".claude/CLAUDE.md", "CLAUDE.md"):
+        path = empty_project_root / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to(project_shared_instructions)
+
+
+@pytest.fixture
+def _link_shared_instructions_to_root_agents_md(
+    empty_project_root: Path, claude_md_symlink_to_root_agents_md: Path
+) -> None:
+    path = empty_project_root / ".agents" / "AGENTS.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.symlink_to(claude_md_symlink_to_root_agents_md.readlink())
+
+
+@pytest.fixture
+def _enable_claude_agents_md_loading(claude_code_adapter: ClaudeCodeAdapter) -> None:
+    write_file(claude_code_adapter.user_settings_path, render_instruction_files_settings_json())
+
+
+@pytest.fixture
+def claude_md_symlink_to_root_agents_md(
+    empty_project_root: Path, native_project_instructions: Path
+) -> Path:
+    path = empty_project_root / "CLAUDE.md"
+    path.symlink_to(native_project_instructions)
     return path
