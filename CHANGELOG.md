@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v16.3.0 (2026-11-24)
+
+### Features
+
+- **adapters**: Read Cursor configuration
+  ([`f391474`](https://github.com/justmatias/agentctl/commit/f3914744b118d406154c163a2705a229ea9c3adc))
+
+### Refactoring
+
+- **adapters**: Consolidate Cursor path discovery
+  ([`bebe573`](https://github.com/justmatias/agentctl/commit/bebe573fb336391cca094a93f2a642fde53b6857))
+
+
 ## v16.2.1 (2026-11-24)
 
 ### Bug Fixes
