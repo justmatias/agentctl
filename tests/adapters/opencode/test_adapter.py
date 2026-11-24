@@ -1,47 +1,93 @@
+import json
 from pathlib import Path
+
+import pytest
 
 from agentctl.adapters import OpenCodeAdapter
 from agentctl.domain import McpServerConfig, MemoryFileConfig, SkillConfig, Source
 
 
-def test_discovers_canonical_extensions_when_opencode_is_configured(
+@pytest.mark.parametrize(
+    ("entry", "expected"),
+    [
+        (
+            {
+                "type": "local",
+                "command": ["tool", "--stdio"],
+                "environment": {"MODE": "test"},
+            },
+            McpServerConfig(command="tool", args=["--stdio"], env={"MODE": "test"}),
+        ),
+        (
+            {
+                "type": "remote",
+                "url": "https://example.com/mcp",
+                "headers": {"X-Mode": "test"},
+            },
+            McpServerConfig(url="https://example.com/mcp", headers={"X-Mode": "test"}),
+        ),
+    ],
+    ids=["local", "remote"],
+)
+def test_parses_canonical_mcp_server_when_global_config_is_present(
+    tmp_path: Path, entry: dict[str, object], expected: McpServerConfig
+) -> None:
+    config = tmp_path / "opencode.json"
+    config.write_text(json.dumps({"mcp": {"example": entry}}))
+    adapter = OpenCodeAdapter(config_directory=tmp_path)
+
+    (path,) = adapter.locate_global_config()
+    (extension,) = adapter.parse(path)
+
+    assert extension.name == "example"
+    assert extension.origin_harness == Source.OPENCODE
+    assert extension.canonical_config == expected
+
+
+def test_skips_invalid_mcp_entry_when_valid_entry_shares_config(tmp_path: Path) -> None:
+    config = tmp_path / "opencode.json"
+    config.write_text(
+        '{"mcp": {"invalid": {"type": "local", "command": []},'
+        '"valid": {"type": "local", "command": ["tool"]}}}'
+    )
+
+    assert [
+        extension.name
+        for extension in OpenCodeAdapter(config_directory=tmp_path).parse(config)
+    ] == ["valid"]
+
+
+def test_discovers_canonical_skill_when_global_skill_is_installed(
     tmp_path: Path,
 ) -> None:
-    global_config = tmp_path / "config" / "opencode"
-    skill = global_config / "skills" / "review" / "SKILL.md"
+    skill = tmp_path / "skills" / "review" / "SKILL.md"
     skill.parent.mkdir(parents=True)
     skill.write_text("---\nname: review\ndescription: Review code\n---\nReview.\n")
-    (global_config / "opencode.json").write_text(
-        """{"mcp": {
-            "local": {"type": "local", "command": ["tool", "--stdio"],
-                      "environment": {"MODE": "test"}},
-            "remote": {"type": "remote", "url": "https://example.com/mcp",
-                       "headers": {"X-Mode": "test"}},
-            "invalid": {"type": "local", "command": []}
-        }}"""
+    adapter = OpenCodeAdapter(config_directory=tmp_path)
+
+    (path,) = adapter.locate_global_config()
+    (extension,) = adapter.parse(path)
+
+    assert extension.name == "review"
+    assert extension.canonical_config == SkillConfig(
+        description="Review code", body="Review."
     )
+
+
+def test_discovers_instructions_when_project_has_agents_file(tmp_path: Path) -> None:
     project = tmp_path / "project"
-    project.mkdir()
-    instructions = project / "AGENTS.md"
-    instructions.write_text("Project instructions\n")
+    (project / ".git").mkdir(parents=True)
+    (project / ".git" / "HEAD").touch()
+    (project / "AGENTS.md").write_text("Project instructions\n")
+    adapter = OpenCodeAdapter(config_directory=tmp_path / "config")
 
-    adapter = OpenCodeAdapter(config_directory=global_config)
-    paths = adapter.locate_global_config() + adapter.locate_project_config(project)
-    extensions = [extension for path in paths for extension in adapter.parse(path)]
+    (path,) = adapter.locate_project_config(project)
+    (extension,) = adapter.parse(path)
 
-    assert {extension.origin_harness for extension in extensions} == {Source.OPENCODE}
-    assert {extension.name: extension.canonical_config for extension in extensions} == {
-        "local": McpServerConfig(
-            command="tool", args=["--stdio"], env={"MODE": "test"}
-        ),
-        "remote": McpServerConfig(
-            url="https://example.com/mcp", headers={"X-Mode": "test"}
-        ),
-        "review": SkillConfig(description="Review code", body="Review."),
-        "AGENTS.md": MemoryFileConfig(
-            content="Project instructions\n", is_persistent_memory=False
-        ),
-    }
+    assert extension.name == "AGENTS.md"
+    assert extension.canonical_config == MemoryFileConfig(
+        content="Project instructions\n", is_persistent_memory=False
+    )
 
 
 def test_parse_returns_no_extensions_when_config_is_malformed(tmp_path: Path) -> None:
