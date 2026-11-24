@@ -55,7 +55,7 @@ def test_locate_global_config_finds_every_global_scope_file(
     }
 
 
-def test_locate_global_config_finds_the_instructions_override(
+def test_locate_global_config_omits_base_instructions_when_shadowed(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
     codex_home = global_and_project_adapter.codex_home
@@ -63,7 +63,6 @@ def test_locate_global_config_finds_the_instructions_override(
     assert set(global_and_project_adapter.locate_global_config()) == {
         codex_home / "config.toml",
         codex_home / "AGENTS.override.md",
-        codex_home / "AGENTS.md",
     }
 
 
@@ -89,6 +88,25 @@ def test_locate_project_config_finds_every_project_scope_file(
         project_root / ".codex" / "config.toml",
         project_root / "AGENTS.md",
     }
+
+
+def test_locate_project_config_omits_base_instructions_when_shadowed(
+    adapter: CodexCliAdapter, tmp_path: Path
+) -> None:
+    base = tmp_path / "AGENTS.md"
+    override = tmp_path / "AGENTS.override.md"
+    base.write_text("Base instructions")
+    override.write_text("Override instructions")
+
+    assert adapter.locate_project_config(tmp_path) == [override]
+
+
+def test_parse_returns_nothing_when_base_instructions_are_shadowed(
+    global_and_project_adapter: CodexCliAdapter,
+) -> None:
+    assert global_and_project_adapter.parse(
+        global_and_project_adapter.codex_home / "AGENTS.md"
+    ) == []
 
 
 def test_parse_extracts_mcp_server_from_config_toml(
@@ -283,10 +301,10 @@ def test_precedence_chain_lists_every_layer_in_precedence_order_when_project_giv
         (Scope.PROJECT, str(project_root / ".codex" / "config.toml")),
         (Scope.USER, str(adapter.user_config_path)),
         (Scope.MANAGED, str(adapter.system_config_path)),
-        (Scope.PROJECT, str(project_root / "AGENTS.override.md")),
-        (Scope.PROJECT, str(project_root / "AGENTS.md")),
         (Scope.USER, str(adapter.codex_home / "AGENTS.override.md")),
         (Scope.USER, str(adapter.codex_home / "AGENTS.md")),
+        (Scope.PROJECT, str(project_root / "AGENTS.override.md")),
+        (Scope.PROJECT, str(project_root / "AGENTS.md")),
     ]
 
 
@@ -417,7 +435,7 @@ def test_locate_project_config_stops_at_git_root_when_working_directory_is_neste
     assert set(adapter.locate_project_config(working_directory)) == set(files)
 
 
-def test_precedence_chain_lists_nearest_files_first_when_working_directory_is_nested(
+def test_precedence_chain_lists_instructions_root_first_when_working_directory_is_nested(
     adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
 ) -> None:
     working_directory, files = nested_project_files
@@ -428,7 +446,7 @@ def test_precedence_chain_lists_nearest_files_first_when_working_directory_is_ne
         Path(layer.file_path)
         for layer in chain.layers
         if layer.scope == Scope.PROJECT and layer.exists
-    ] == files
+    ] == [*files[:2], *reversed(files[2:])]
 
 
 def test_precedence_chain_tags_ancestor_layers_when_working_directory_is_nested(

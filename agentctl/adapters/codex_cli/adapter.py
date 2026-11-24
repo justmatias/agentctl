@@ -103,13 +103,17 @@ class CodexCliAdapter:
     def project_config_path(project_root: Path) -> Path:
         return project_root / ".codex" / CONFIG_FILENAME
 
+    @staticmethod
+    def _preferred_instructions_path(directory: Path) -> Path:
+        override_path = directory / INSTRUCTIONS_OVERRIDE_FILENAME
+        return override_path if override_path.is_file() else directory / INSTRUCTIONS_FILENAME
+
     def locate_global_config(self) -> list[Path]:
         candidates = [
             self.managed_config_path,
             self.system_config_path,
             self.user_config_path,
-            self.codex_home / INSTRUCTIONS_OVERRIDE_FILENAME,
-            self.codex_home / INSTRUCTIONS_FILENAME,
+            self._preferred_instructions_path(self.codex_home),
         ]
         return [path for path in candidates if path.is_file()]
 
@@ -119,8 +123,7 @@ class CodexCliAdapter:
             for directory in project_directories(project_root)
             for path in (
                 self.project_config_path(directory),
-                directory / INSTRUCTIONS_OVERRIDE_FILENAME,
-                directory / INSTRUCTIONS_FILENAME,
+                self._preferred_instructions_path(directory),
             )
         ]
         return [path for path in candidates if path.is_file()]
@@ -129,6 +132,8 @@ class CodexCliAdapter:
         if not path.is_file():
             return []
         if path.name in {INSTRUCTIONS_FILENAME, INSTRUCTIONS_OVERRIDE_FILENAME}:
+            if path != self._preferred_instructions_path(path.parent):
+                return []
             # AGENTS.md is authored, not accumulated by the agent: Codex has no
             # auto-memory file of its own (SPECS.md §15).
             return parse_memory_file(
@@ -160,9 +165,8 @@ class CodexCliAdapter:
             ),
         )
 
-    @staticmethod
     def _build_directory_instructions_layers(
-        directory: Path, *, scope: Scope, origin: LayerOrigin, ranks: Iterator[int]
+        self, directory: Path, *, scope: Scope, origin: LayerOrigin, ranks: Iterator[int]
     ) -> list[PrecedenceLayer]:
         """The `AGENTS.override.md` / `AGENTS.md` pair one directory contributes.
 
@@ -172,9 +176,9 @@ class CodexCliAdapter:
         """
         override_path = directory / INSTRUCTIONS_OVERRIDE_FILENAME
         base_path = directory / INSTRUCTIONS_FILENAME
-        override_exists = override_path.is_file()
+        preferred_path = self._preferred_instructions_path(directory)
         layers: list[PrecedenceLayer] = []
-        for path, is_shadowed in ((override_path, False), (base_path, override_exists)):
+        for path in (override_path, base_path):
             exists = path.is_file()
             layers.append(
                 ConsultedLayer(
@@ -183,15 +187,18 @@ class CodexCliAdapter:
                     exists=exists,
                     origin=origin,
                     order_rank=next(ranks),
-                    resolves=exists and not is_shadowed,
+                    resolves=exists and path == preferred_path,
                 )
             )
         return layers
 
     def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
-        """Codex's stack, highest precedence first: managed config, then CLI
-        overrides, then `.codex/config.toml`, the user's `config.toml` and the
-        system-wide one, then the instructions files each of those scopes owns.
+        """Report config and instruction candidates in one ordered inventory.
+
+        Config ranks run from highest to lowest override priority. The
+        instruction ranks that follow describe concatenation order: Codex home
+        first, then project root through working directory. Only the candidate
+        marked as resolving in each directory contributes instructions.
 
         Config precedence is quoted from
         learn.chatgpt.com/docs/config-file/config-basic (fetched 2026-08-14);
@@ -252,15 +259,6 @@ class CodexCliAdapter:
                 ),
             ]
         )
-        for directory, origin in directory_origins:
-            layers.extend(
-                self._build_directory_instructions_layers(
-                    directory,
-                    scope=Scope.PROJECT,
-                    origin=origin,
-                    ranks=ranks,
-                )
-            )
         layers.extend(
             self._build_directory_instructions_layers(
                 self.codex_home,
@@ -269,4 +267,13 @@ class CodexCliAdapter:
                 ranks=ranks,
             )
         )
+        for directory, origin in reversed(directory_origins):
+            layers.extend(
+                self._build_directory_instructions_layers(
+                    directory,
+                    scope=Scope.PROJECT,
+                    origin=origin,
+                    ranks=ranks,
+                )
+            )
         return PrecedenceChain(source=self.source, project_id=None, layers=layers)
