@@ -62,6 +62,9 @@ class CursorAdapter:
             ])
         return paths
 
+    def locate_scoped_global_config(self) -> list[tuple[Path, Scope]]:
+        return [(path, Scope.USER) for path in self.locate_global_config()]
+
     def locate_global_config(self) -> list[Path]:
         candidates = self._candidate_paths(self.home, Scope.USER)
         return [path for path in candidates if path.is_file()]

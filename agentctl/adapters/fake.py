@@ -36,6 +36,10 @@ class NullAdapter:
         )
 
     @staticmethod
+    def locate_scoped_global_config() -> list[tuple[Path, Scope]]:
+        return []
+
+    @staticmethod
     def locate_global_config() -> list[Path]:
         return []
 

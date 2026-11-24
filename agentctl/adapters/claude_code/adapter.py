@@ -153,6 +153,9 @@ class ClaudeCodeAdapter:
                 return setting.value
         return None
 
+    def locate_scoped_global_config(self) -> list[tuple[Path, Scope]]:
+        return [(path, Scope.USER) for path in self.locate_global_config()]
+
     def locate_global_config(self) -> list[Path]:
         candidates = [
             self.home / ".claude.json",

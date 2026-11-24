@@ -12,17 +12,7 @@ from agentctl.adapters import (
 from agentctl.domain import Extension, ExtensionType, McpServerConfig, Source
 from tests.adapters.scenarios import copy_fixture_scenario
 
-
-def codex_adapter_at(home: Path) -> CodexCliAdapter:
-    """An adapter whose every machine-wide path stays inside `home`.
-
-    Nothing a test runs may stat the developer's real `~/.codex` or `/etc/codex`,
-    so both directories are always redirected into the scenario's home.
-    """
-    return CodexCliAdapter(
-        codex_home=home / ".codex",
-        system_config_directory=home / "system-config",
-    )
+from .helpers import codex_adapter_at
 
 
 @pytest.fixture

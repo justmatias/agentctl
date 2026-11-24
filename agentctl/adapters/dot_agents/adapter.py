@@ -50,6 +50,9 @@ class DotAgentsAdapter:
         paths = [shared] if shared.is_dir() else []
         return paths + [path for path in candidates if path.is_file()]
 
+    def locate_scoped_global_config(self) -> list[tuple[Path, Scope]]:
+        return [(path, Scope.GLOBAL) for path in self.locate_global_config()]
+
     def locate_global_config(self) -> list[Path]:
         return self._locate_config(self.home, project=False)
 

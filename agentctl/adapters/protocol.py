@@ -75,6 +75,9 @@ class SourceAdapter(Protocol):
         fixed per adapter class, never per instance.
         """
 
+    def locate_scoped_global_config(self) -> list[tuple[Path, Scope]]:
+        """Machine-wide discovery paths with their binding scopes."""
+
     def locate_global_config(self) -> list[Path]:
         """Global-scope config files available for parsing."""
 
