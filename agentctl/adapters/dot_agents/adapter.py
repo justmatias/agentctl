@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
+from pydantic import BaseModel
+
 from agentctl.adapters.common import parse_memory_file, serialize_memory_file
 from agentctl.adapters.protocol import (
     AdapterCapabilities,
@@ -24,8 +26,7 @@ from agentctl.domain import (
 )
 
 
-@dataclass
-class _AnnotatedNativeLayers:
+class _AnnotatedNativeLayers(BaseModel):
     layers: list[PrecedenceLayer]
     loaded_targets: set[Path]
 
