@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v16.2.1 (2026-11-24)
+
+### Bug Fixes
+
+- **adapters**: Account for shared instruction symlink aliases
+  ([`a363c73`](https://github.com/justmatias/agentctl/commit/a363c73350041c8b1ff646c7d3231e023ecf02a4))
+
+- **adapters**: Honor Claude settings in consumption reports
+  ([`49a09d9`](https://github.com/justmatias/agentctl/commit/49a09d9e804fab04acd193e36d4996331dfc50c5))
+
+- **adapters**: Load project AGENTS.md right after its CLAUDE.md files
+  ([`7b6463e`](https://github.com/justmatias/agentctl/commit/7b6463ee358a3d4c71707c59cb143a8e149a9282))
+
+### Refactoring
+
+- **adapters**: Clarify instruction layer handling
+  ([`5e6c7ad`](https://github.com/justmatias/agentctl/commit/5e6c7ad8c665f529095ff1fbbb547b34e8a3d6cc))
+
+- **adapters**: Read instruction setting through one alias path
+  ([`f5ffd23`](https://github.com/justmatias/agentctl/commit/f5ffd2372692196778b95740a9626a884da258f2))
+
+
 ## v16.2.0 (2026-11-23)
 
 ### Chores
