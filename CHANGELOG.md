@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v16.4.0 (2026-11-24)
+
+### Bug Fixes
+
+- **adapters**: Accept OpenCode JSON comments and trailing commas
+  ([`79a0ae6`](https://github.com/justmatias/agentctl/commit/79a0ae68944d084d2f0426011e788a333a737714))
+
+- **adapters**: Discover OpenCode JSONC configuration
+  ([`6ffb579`](https://github.com/justmatias/agentctl/commit/6ffb579b39eb0657e879e3cb38ad01676ca98601))
+
+- **adapters**: Discover symlinked OpenCode skills
+  ([`12cde60`](https://github.com/justmatias/agentctl/commit/12cde60c3adf4765d85d89640139082b18f07caf))
+
+### Features
+
+- **adapters**: Read OpenCode configuration
+  ([`832119a`](https://github.com/justmatias/agentctl/commit/832119a3eef89a7618268a67054f2ce3c2d78cfe))
+
+### Refactoring
+
+- **adapters**: Clarify OpenCode precedence ordering
+  ([`0fe0116`](https://github.com/justmatias/agentctl/commit/0fe011651540eaa6a582d3386ca48ecd8c79928f))
+
+- **adapters**: Keep OpenCode capabilities as class data
+  ([`f0b308c`](https://github.com/justmatias/agentctl/commit/f0b308c7e2f056f98bfdf740564f0f00695a84a8))
+
+- **adapters**: Model the native layer annotation result
+  ([`ba12f9c`](https://github.com/justmatias/agentctl/commit/ba12f9cf53e1bcd4d1d9c4b9f1557f7b2772c6c3))
+
+- **adapters**: Name the native layer annotation result
+  ([`ee09ec8`](https://github.com/justmatias/agentctl/commit/ee09ec81b8b2c3e6cb4ad826fcdde84ac8d12a06))
+
+- **adapters**: Simplify OpenCode discovery and parsing
+  ([`4e47999`](https://github.com/justmatias/agentctl/commit/4e47999a00f7854a66f165251e0684494183b72c))
+
+
 ## v16.3.0 (2026-11-24)
 
 ### Features
