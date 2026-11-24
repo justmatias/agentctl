@@ -112,9 +112,9 @@ class CodexCliAdapter:
             if not path.is_file():
                 continue
             try:
-                if path.read_text(encoding="utf-8").strip():
+                if path.read_text(encoding="utf-8", errors="replace").strip():
                     return path
-            except (OSError, UnicodeError) as error:
+            except OSError as error:
                 logger.warning(
                     f"Could not read Codex instructions from {path}: {error}"
                 )
@@ -157,7 +157,10 @@ class CodexCliAdapter:
             # AGENTS.md is authored, not accumulated by the agent: Codex has no
             # auto-memory file of its own (SPECS.md §15).
             return parse_memory_file(
-                path, source=self.source, is_persistent_memory=False
+                path,
+                source=self.source,
+                is_persistent_memory=False,
+                decoding_errors="replace",
             )
         if path.suffix == ".toml":
             return parse_mcp_servers_toml(path, source=self.source)

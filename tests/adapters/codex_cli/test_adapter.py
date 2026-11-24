@@ -249,6 +249,20 @@ def test_parse_extracts_instructions_override_file(
     assert "Ship nothing to production this week." in canonical.content
 
 
+def test_parse_loads_instructions_when_utf8_contains_invalid_bytes(
+    adapter: CodexCliAdapter, tmp_path: Path
+) -> None:
+    override = tmp_path / "AGENTS.override.md"
+    override.write_bytes(b"Project instructions \xff")
+
+    extensions = adapter.parse(override)
+
+    assert len(extensions) == 1
+    canonical = extensions[0].canonical_config
+    assert isinstance(canonical, MemoryFileConfig)
+    assert canonical.content == "Project instructions \ufffd"
+
+
 def test_parse_returns_nothing_when_toml_is_malformed(
     malformed_toml_adapter: CodexCliAdapter,
 ) -> None:

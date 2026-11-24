@@ -237,7 +237,7 @@ def nested_project_files(
     else:
         git_marker.mkdir()
         (git_marker / "HEAD").write_text("ref: refs/heads/main\n")
-    (tmp_path / "AGENTS.md").touch()
+    (tmp_path / "AGENTS.md").write_text("Instructions above the Git root")
 
     files = [
         working_directory / ".codex" / "config.toml",
