@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from tomlkit.exceptions import TOMLKitError
 
 from agentctl.domain import (
+    CodexMcpOptions,
     Extension,
     McpServerConfig,
     MemoryFileConfig,
@@ -20,15 +21,9 @@ SKILL_FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)", re.
 
 
 def _parse_mcp_server_entries(
-    servers: object, *, path: Path, source: Source, headers_key: str
+    servers: object, *, path: Path, source: Source, codex: bool = False
 ) -> list[Extension]:
-    """Turn a source's `name -> server entry` mapping into canonical Extensions.
-
-    Sources spell their MCP entries the same way except for the key that holds
-    remote-transport headers, so `headers_key` is the only per-source input; the
-    entry-shape validation and the "one bad entry never sinks the file"
-    contract are shared.
-    """
+    """Normalize server entries while isolating malformed entries."""
     if not isinstance(servers, dict):
         return []
     extensions = []
@@ -37,12 +32,19 @@ def _parse_mcp_server_entries(
             logger.warning(f"Skipping malformed MCP server entry {name!r} in {path}")
             continue
         try:
+            codex_options = (
+                CodexMcpOptions.model_validate(entry, extra="ignore") if codex else None
+            )
+            if codex_options is not None and not codex_options.model_fields_set:
+                codex_options = None
             canonical = McpServerConfig(
                 command=entry.get("command"),
                 args=entry.get("args", []),
                 env=entry.get("env", {}),
                 url=entry.get("url"),
-                headers=entry.get(headers_key, {}),
+                headers=entry.get("http_headers" if codex else "headers", {}),
+                enabled=entry.get("enabled", True) if codex else True,
+                codex=codex_options,
             )
         except ValidationError as exc:
             logger.warning(
@@ -67,9 +69,7 @@ def parse_mcp_servers_json(path: Path, *, source: Source) -> list[Extension]:
             f"Skipping {path}: expected a JSON object, got {type(data).__name__}"
         )
         return []
-    return _parse_mcp_server_entries(
-        data.get("mcpServers"), path=path, source=source, headers_key="headers"
-    )
+    return _parse_mcp_server_entries(data.get("mcpServers"), path=path, source=source)
 
 
 def parse_mcp_servers_toml(path: Path, *, source: Source) -> list[Extension]:
@@ -77,20 +77,18 @@ def parse_mcp_servers_toml(path: Path, *, source: Source) -> list[Extension]:
 
     Reading is non-destructive: the document is parsed with comments and
     formatting intact and never written back, so anything the canonical shape
-    has no room for — comments, unrelated tables, Codex-only keys such as
-    `startup_timeout_sec` — stays exactly as the user left it on disk.
+    has no room for stays as the user left it on disk.
     """
     try:
         document = tomlkit.parse(path.read_text(encoding="utf-8"))
     except TOMLKitError as exc:
         logger.warning(f"Skipping malformed TOML in {path}: {exc}")
         return []
-    # Codex names its remote-transport headers `http_headers`.
     return _parse_mcp_server_entries(
         document.unwrap().get("mcp_servers"),
         path=path,
         source=source,
-        headers_key="http_headers",
+        codex=True,
     )
 
 

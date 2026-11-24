@@ -19,7 +19,9 @@ def serialize_mcp_server_json(extension: Extension) -> str:
     """Render an MCP server as the `mcpServers` JSON object Claude Code and Cursor read."""
     config = extension.canonical_config
     assert isinstance(config, McpServerConfig)
-    server = config.model_dump(exclude={"type"}, exclude_defaults=True)
+    if not config.enabled:
+        raise ValueError("This MCP JSON format cannot represent disabled servers")
+    server = config.model_dump(exclude={"type", "codex"}, exclude_defaults=True)
     return json.dumps({"mcpServers": {extension.name: server}}, indent=2)
 
 
@@ -27,7 +29,11 @@ def serialize_mcp_server_toml(extension: Extension) -> str:
     """Render an MCP server as the `[mcp_servers.<name>]` table Codex CLI reads."""
     config = extension.canonical_config
     assert isinstance(config, McpServerConfig)
-    entry = config.model_dump(exclude={"type", "headers"}, exclude_defaults=True)
+    entry = config.model_dump(
+        exclude={"type", "headers", "codex"}, exclude_defaults=True
+    )
+    if config.codex is not None:
+        entry.update(config.codex.model_dump(exclude_none=True))
     if config.headers:
         entry["http_headers"] = config.headers
     servers = tomlkit.table(is_super_table=True)

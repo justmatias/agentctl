@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -579,3 +580,24 @@ def test_precedence_chain_tags_ancestor_layers_when_working_directory_is_nested(
         files[3]: LayerOrigin.ANCESTOR_DIR,
         files[4]: LayerOrigin.ANCESTOR_DIR,
     }
+
+
+def test_mcp_settings_survive_round_trip_when_codex_config_declares_them(
+    adapter: CodexCliAdapter, configured_mcp_servers_path: Path
+) -> None:
+    expected = tomllib.loads(configured_mcp_servers_path.read_text())["mcp_servers"]
+    local, remote = adapter.parse(configured_mcp_servers_path)
+    assert isinstance(local.canonical_config, McpServerConfig)
+    assert isinstance(remote.canonical_config, McpServerConfig)
+    assert local.canonical_config.enabled is False
+    assert remote.canonical_config.enabled is True
+    for extension in (local, remote):
+        rendered = adapter.serialize(extension)
+        assert (
+            tomllib.loads(rendered)["mcp_servers"][extension.name]
+            == expected[extension.name]
+        )
+        configured_mcp_servers_path.write_text(rendered)
+        assert adapter.parse(configured_mcp_servers_path)[0].canonical_config == (
+            extension.canonical_config
+        )

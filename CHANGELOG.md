@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v16.4.2 (2026-11-24)
+
+### Bug Fixes
+
+- **codex**: Preserve disabled MCP servers and their settings
+  ([`feaed8e`](https://github.com/justmatias/agentctl/commit/feaed8e9f504263a4da22e904ea2aa63abbe8ce3))
+
+
 ## v16.4.1 (2026-11-24)
 
 ### Bug Fixes

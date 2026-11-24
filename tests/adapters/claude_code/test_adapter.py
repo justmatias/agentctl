@@ -477,3 +477,13 @@ def test_precedence_chain_skips_agents_md_when_its_plugin_is_disabled(
     )
 
     assert isinstance(layer, NotConsultedLayer)
+
+
+def test_serialize_rejects_mcp_server_when_disabled(adapter: ClaudeCodeAdapter) -> None:
+    extension = Extension(
+        name="example",
+        canonical_config=McpServerConfig(command="example", enabled=False),
+    )
+
+    with pytest.raises(ValueError, match="cannot represent disabled servers"):
+        adapter.serialize(extension)

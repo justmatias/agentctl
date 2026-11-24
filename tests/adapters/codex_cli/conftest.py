@@ -295,3 +295,28 @@ def _remove_instructions_after_read(
         return content
 
     monkeypatch.setattr(Path, "read_text", read_instructions)
+
+
+@pytest.fixture
+def configured_mcp_servers_path(tmp_path: Path) -> Path:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[mcp_servers.local]
+command = "example"
+enabled = false
+cwd = "/workspace"
+env_vars = [
+    "LOCAL_SETTING",
+    { name = "DEFAULT_SOURCE_SETTING" },
+    { name = "REMOTE_SETTING", source = "remote" },
+]
+startup_timeout_sec = 1.5
+
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+bearer_token_env_var = "EXAMPLE_TOKEN"
+env_http_headers = { X-Example = "EXAMPLE_HEADER" }
+"""
+    )
+    return config_path
