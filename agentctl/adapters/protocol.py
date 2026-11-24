@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import NamedTuple, Protocol, runtime_checkable
 
 from agentctl.domain import Extension, ExtensionType, PrecedenceChain, Scope, Source
 
@@ -55,6 +55,11 @@ class AdapterCapabilities:
     workflow_target_forms: frozenset[WorkflowTargetForm] = field(default_factory=frozenset)
 
 
+class ScopedConfigPath(NamedTuple):
+    path: Path
+    scope: Scope
+
+
 @runtime_checkable
 class SourceAdapter(Protocol):
     """One adapter per source — a harness, or the shared `.agents` convention.
@@ -75,7 +80,7 @@ class SourceAdapter(Protocol):
         fixed per adapter class, never per instance.
         """
 
-    def locate_scoped_global_config(self) -> list[tuple[Path, Scope]]:
+    def locate_scoped_global_config(self) -> list[ScopedConfigPath]:
         """Machine-wide discovery paths with their binding scopes."""
 
     def locate_global_config(self) -> list[Path]:

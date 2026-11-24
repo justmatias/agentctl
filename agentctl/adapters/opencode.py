@@ -17,6 +17,7 @@ from agentctl.adapters.common import (
 from agentctl.adapters.protocol import (
     AdapterCapabilities,
     MergeSemantics,
+    ScopedConfigPath,
     WalkUpBehavior,
     WalkUpStop,
     WorkflowTargetForm,
@@ -112,8 +113,8 @@ class OpenCodeAdapter:
         ]
         return native_configs + project_configs + instructions + skills
 
-    def locate_scoped_global_config(self) -> list[tuple[Path, Scope]]:
-        return [(path, Scope.USER) for path in self.locate_global_config()]
+    def locate_scoped_global_config(self) -> list[ScopedConfigPath]:
+        return [ScopedConfigPath(path, Scope.USER) for path in self.locate_global_config()]
 
     def locate_global_config(self) -> list[Path]:
         return [path for path in self._global_candidates if path.is_file()]

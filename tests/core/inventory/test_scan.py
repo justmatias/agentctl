@@ -4,8 +4,9 @@ import pytest
 from sqlalchemy import event
 from sqlalchemy.engine import Connection
 
+from agentctl.adapters import OpenCodeAdapter
 from agentctl.core import CoreService, InventoryClassification, InventoryItem
-from agentctl.domain import Scope, Source, SyncState
+from agentctl.domain import Extension, Scope, Source, SyncState
 from agentctl.storage import (
     Database,
     SqliteBindingRepository,
@@ -15,6 +16,44 @@ from agentctl.storage import (
 
 @pytest.mark.usefixtures("installed_config")
 def test_scan_returns_ordered_inventory_when_all_sources_are_present(
+    service: CoreService,
+) -> None:
+    first = service.scan_inventory()
+    assert [(item.binding.harness, item.binding.scope) for item in first] == [
+        (Source.CLAUDE_CODE, Scope.USER),
+        (Source.CLAUDE_CODE, Scope.USER),
+        (Source.CODEX_CLI, Scope.MANAGED),
+        (Source.CURSOR, Scope.USER),
+        (Source.DOT_AGENTS, Scope.GLOBAL),
+        (Source.OPENCODE, Scope.USER),
+    ]
+    assert [item.extension.name for item in first[:2]] == ["alpha", "beta"]
+
+
+@pytest.mark.usefixtures("installed_config")
+def test_scan_finds_observations_needing_review_when_database_is_empty(
+    service: CoreService,
+) -> None:
+    assert all(
+        item.classification == InventoryClassification.NEEDS_REVIEW
+        for item in service.scan_inventory()
+    )
+
+
+@pytest.mark.usefixtures("installed_config")
+def test_scan_preserves_observations_when_inputs_are_unchanged(
+    service: CoreService,
+) -> None:
+    first = service.scan_inventory()
+    extensions = SqliteExtensionRepository(service.database.session)
+    bindings = SqliteBindingRepository(service.database.session)
+    before = (extensions.list(), bindings.list(order_by="id"))
+    assert service.scan_inventory() == first
+    assert (extensions.list(), bindings.list(order_by="id")) == before
+
+
+@pytest.mark.usefixtures("installed_config")
+def test_scan_rebuilds_observations_when_database_is_replaced(
     service: CoreService,
 ) -> None:
     def _describe_inventory(
@@ -31,28 +70,11 @@ def test_scan_returns_ordered_inventory_when_all_sources_are_present(
         ]
 
     first = service.scan_inventory()
-    assert [(item.binding.harness, item.binding.scope) for item in first] == [
-        (Source.CLAUDE_CODE, Scope.USER),
-        (Source.CLAUDE_CODE, Scope.USER),
-        (Source.CODEX_CLI, Scope.MANAGED),
-        (Source.CURSOR, Scope.USER),
-        (Source.DOT_AGENTS, Scope.GLOBAL),
-        (Source.OPENCODE, Scope.USER),
-    ]
-    assert [item.extension.name for item in first[:2]] == ["alpha", "beta"]
-    assert all(
-        item.classification == InventoryClassification.NEEDS_REVIEW for item in first
-    )
     assert all(len(item.binding.last_seen_hash or "") == 64 for item in first)
-    extensions = SqliteExtensionRepository(service.database.session)
-    bindings = SqliteBindingRepository(service.database.session)
-    before = (extensions.list(), bindings.list(order_by="id"))
-    assert service.scan_inventory() == first
-    assert (extensions.list(), bindings.list(order_by="id")) == before
     with Database() as rebuilt:
         assert _describe_inventory(
             CoreService(service.registry, rebuilt).scan_inventory()
-        ) == (_describe_inventory(first))
+        ) == _describe_inventory(first)
 
 
 def test_scan_updates_one_hash_when_one_server_changes(
@@ -131,7 +153,7 @@ def test_scan_reports_binding_disabled_when_codex_config_disables_server(
     service: CoreService,
     installed_config: dict[str, Path],
 ) -> None:
-    path = installed_config["system/config.toml"]
+    path = installed_config["system-config/config.toml"]
     enabled = next(
         item.binding
         for item in service.scan_inventory()
@@ -174,3 +196,68 @@ def test_scan_preserves_canonical_config_when_multiple_bindings_share_it(
 
     assert observed.extension.canonical_config != first.extension.canonical_config
     assert extensions.get(first.extension.id) == first.extension
+
+
+def test_scan_locates_claude_skill_when_installed_in_user_directory(
+    service: CoreService, tmp_path: Path
+) -> None:
+    path = tmp_path / ".claude" / "skills" / "example" / "SKILL.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("---\nname: example\n---\nInstructions\n", encoding="utf-8")
+
+    (item,) = service.scan_inventory()
+    assert item.extension.name == "example"
+    assert item.binding.harness == Source.CLAUDE_CODE
+    assert item.binding.scope == Scope.USER
+
+
+def test_scan_tags_claude_mcp_when_found_in_managed_mcp_file(
+    service: CoreService, tmp_path: Path
+) -> None:
+    path = tmp_path / "managed-mcp.json"
+    path.write_text('{"mcpServers":{"example":{"command":"example"}}}', encoding="utf-8")
+
+    (item,) = service.scan_inventory()
+    assert item.binding.scope == Scope.MANAGED
+
+
+def test_scan_updates_skill_hash_when_bundled_file_bytes_change(
+    service: CoreService, tmp_path: Path
+) -> None:
+    path = tmp_path / "opencode" / "skills" / "example" / "SKILL.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("---\nname: example\n---\nInstructions\n", encoding="utf-8")
+    bundled_file = path.parent / "data.bin"
+    bundled_file.write_bytes(b"first")
+    (first,) = service.scan_inventory()
+    bundled_file.write_bytes(b"second")
+
+    (second,) = service.scan_inventory()
+    assert first.binding.id == second.binding.id
+    assert first.binding.last_seen_hash != second.binding.last_seen_hash
+
+
+@pytest.mark.usefixtures("installed_config")
+def test_scan_keeps_other_observations_when_a_bundled_file_disappears(
+    service: CoreService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill_path = tmp_path / "opencode" / "skills" / "example" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("---\nname: example\n---\nInstructions\n", encoding="utf-8")
+    bundled_file = skill_path.parent / "data.bin"
+    bundled_file.write_bytes(b"content")
+    parse = OpenCodeAdapter.parse
+
+    def remove_bundle_after_parse(
+        adapter: OpenCodeAdapter, path: Path, *, scope: Scope | None = None
+    ) -> list[Extension]:
+        extensions = parse(adapter, path, scope=scope)
+        if path == skill_path:
+            bundled_file.unlink()
+        return extensions
+
+    monkeypatch.setattr(OpenCodeAdapter, "parse", remove_bundle_after_parse)
+
+    inventory = service.scan_inventory()
+    assert len(inventory) == 6
+    assert all(item.extension.name != "example" for item in inventory)

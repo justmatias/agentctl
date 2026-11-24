@@ -17,6 +17,7 @@ from agentctl.adapters.common import (
 from agentctl.adapters.protocol import (
     AdapterCapabilities,
     MergeSemantics,
+    ScopedConfigPath,
     WalkUpBehavior,
     WalkUpStop,
     WorkflowTargetForm,
@@ -131,10 +132,10 @@ class CodexCliAdapter:
                 break
         return None
 
-    def locate_scoped_global_config(self) -> list[tuple[Path, Scope]]:
+    def locate_scoped_global_config(self) -> list[ScopedConfigPath]:
         managed_paths = {self.managed_config_path, self.system_config_path}
         return [
-            (path, Scope.MANAGED if path in managed_paths else Scope.USER)
+            ScopedConfigPath(path, Scope.MANAGED if path in managed_paths else Scope.USER)
             for path in self.locate_global_config()
         ]
 

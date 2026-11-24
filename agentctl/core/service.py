@@ -2,8 +2,9 @@ import json
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from hashlib import sha256
+from hashlib import file_digest, sha256
 from pathlib import Path
+from typing import NamedTuple
 
 from sqlmodel import col, select
 
@@ -14,6 +15,7 @@ from agentctl.domain import (
     ExtensionType,
     McpServerConfig,
     Scope,
+    SkillConfig,
     Source,
     SyncState,
 )
@@ -23,7 +25,18 @@ from agentctl.utils import logger
 
 from .inventory import InventoryClassification, InventoryItem
 
-type InventoryKey = tuple[Source, Scope, str, ExtensionType, str]
+
+class InventoryKey(NamedTuple):
+    source: Source
+    scope: Scope
+    path: Path
+    extension_type: ExtensionType
+    name: str
+
+
+class InventoryObservation(NamedTuple):
+    extension: Extension
+    content_hash: str
 
 
 @dataclass
@@ -49,12 +62,13 @@ class CoreService:
             raise
         return inventory
 
-    def _discover_extensions(self) -> dict[InventoryKey, Extension]:
-        discovered: dict[InventoryKey, Extension] = {}
+    def _discover_extensions(self) -> dict[InventoryKey, InventoryObservation]:
+        discovered: dict[InventoryKey, InventoryObservation] = {}
         for adapter in self.registry.list():
-            for path, scope in sorted(set(adapter.locate_scoped_global_config())):
+            for location in sorted(set(adapter.locate_scoped_global_config())):
+                path = location.path.absolute()
                 try:
-                    extensions = adapter.parse(path, scope=scope)
+                    extensions = adapter.parse(path, scope=location.scope)
                 except (OSError, UnicodeDecodeError) as error:
                     logger.warning(
                         f"Skipping unreadable config {path}: {type(error).__name__}"
@@ -65,18 +79,27 @@ class CoreService:
                         f"Skipping config that disappeared during scan: {path}"
                     )
                 for extension in extensions:
-                    key = (
+                    key = InventoryKey(
                         adapter.source,
-                        scope,
-                        str(path.absolute()),
+                        location.scope,
+                        path,
                         extension.type,
                         extension.name,
                     )
-                    discovered.setdefault(key, extension)
+                    try:
+                        content_hash = _hash_config(path, extension)
+                    except OSError as error:
+                        logger.warning(
+                            f"Skipping unreadable bundle for {path}: {type(error).__name__}"
+                        )
+                        continue
+                    discovered.setdefault(
+                        key, InventoryObservation(extension, content_hash)
+                    )
         return discovered
 
     def _store_observations(
-        self, discovered: dict[InventoryKey, Extension]
+        self, discovered: dict[InventoryKey, InventoryObservation]
     ) -> list[InventoryItem]:
         session = self.database.session
         query = (
@@ -88,45 +111,44 @@ class CoreService:
         binding_counts: Counter[str] = Counter()
         for binding, extension in session.exec(query):
             binding_counts[extension.id] += 1
-            key = (
+            key = InventoryKey(
                 Source(binding.harness),
                 Scope(binding.scope),
-                str(Path(binding.file_path).absolute()),
+                Path(binding.file_path).absolute(),
                 ExtensionType(extension.type),
                 extension.name,
             )
             existing.setdefault(key, (binding, extension))
 
         return [
-            self._observe_extension(key, parsed, existing.get(key), binding_counts)
-            for key, parsed in sorted(discovered.items())
+            self._observe_extension(
+                key, observation, existing.get(key), binding_counts
+            )
+            for key, observation in sorted(discovered.items())
         ]
 
     def _observe_extension(
         self,
         key: InventoryKey,
-        parsed: Extension,
+        observation: InventoryObservation,
         rows: tuple[BindingRow, ExtensionRow] | None,
         binding_counts: Counter[str],
     ) -> InventoryItem:
-        source, scope, path, _, _ = key
+        parsed = observation.extension
         canonical = parsed.canonical_config
         config = canonical.model_dump(mode="json")
-        content_hash = sha256(
-            json.dumps(config, sort_keys=True).encode("utf-8")
-        ).hexdigest()
         if rows is None:
             extension_row = ExtensionRow(**parsed.model_dump(mode="json"))
             binding = Binding(
                 extension_id=parsed.id,
-                harness=source,
-                scope=scope,
-                file_path=path,
+                harness=key.source,
+                scope=key.scope,
+                file_path=str(key.path),
                 enabled=canonical.enabled
                 if isinstance(canonical, McpServerConfig)
                 else True,
                 sync_state=SyncState.UNADOPTED,
-                last_seen_hash=content_hash,
+                last_seen_hash=observation.content_hash,
             )
             session = self.database.session
             session.add(extension_row)
@@ -134,7 +156,7 @@ class CoreService:
             session.add(BindingRow(**binding.model_dump(mode="json")))
         else:
             binding_row, extension_row = rows
-            binding_row.last_seen_hash = content_hash
+            binding_row.last_seen_hash = observation.content_hash
             if isinstance(canonical, McpServerConfig):
                 binding_row.enabled = canonical.enabled
             if (
@@ -154,6 +176,17 @@ class CoreService:
             binding=binding,
             classification=_classify_binding(binding.sync_state),
         )
+
+
+def _hash_config(path: Path, extension: Extension) -> str:
+    canonical = extension.canonical_config
+    config = canonical.model_dump(mode="json")
+    digest = sha256(json.dumps(config, sort_keys=True).encode("utf-8"))
+    if isinstance(canonical, SkillConfig):
+        for relative_path in sorted(canonical.bundled_files):
+            with (path.parent / relative_path).open("rb") as bundle:
+                digest.update(file_digest(bundle, "sha256").digest())
+    return digest.hexdigest()
 
 
 def _classify_binding(state: SyncState) -> InventoryClassification:
