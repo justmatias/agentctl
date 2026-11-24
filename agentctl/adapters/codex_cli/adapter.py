@@ -111,17 +111,16 @@ class CodexCliAdapter:
             path = directory / filename
             if not path.is_file():
                 continue
-            # The global loader falls through to the next nonblank file.
-            if scope == Scope.USER:
-                try:
-                    if not path.read_text(encoding="utf-8", errors="replace").strip():
-                        continue
-                except OSError as error:
-                    logger.warning(
-                        f"Could not read Codex instructions from {path}: {error}"
-                    )
-                    continue
-            return path
+            try:
+                if path.read_text(encoding="utf-8").strip():
+                    return path
+            except (OSError, UnicodeError) as error:
+                logger.warning(
+                    f"Could not read Codex instructions from {path}: {error}"
+                )
+            # Project discovery picks the first file before checking its content.
+            if scope == Scope.PROJECT:
+                break
         return None
 
     def locate_global_config(self) -> list[Path]:

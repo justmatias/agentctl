@@ -248,5 +248,5 @@ def nested_project_files(
     ]
     for path in files:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.touch()
+        path.write_text("Example instructions" if path.suffix == ".md" else "")
     return working_directory, files

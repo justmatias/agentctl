@@ -121,16 +121,22 @@ def test_locate_project_config_omits_base_instructions_when_shadowed(
     assert adapter.locate_project_config(tmp_path) == [override]
 
 
-def test_project_instructions_keep_the_override_when_codex_home_overlaps(
-    adapter: CodexCliAdapter,
+def test_project_instructions_do_not_fall_back_when_override_is_blank(
+    adapter: CodexCliAdapter, tmp_path: Path
 ) -> None:
-    project_root = adapter.codex_home
-    project_root.mkdir()
-    (project_root / "AGENTS.md").write_text("Global base instructions")
-    override = project_root / "AGENTS.override.md"
+    base = tmp_path / "AGENTS.md"
+    base.write_text("Project base instructions")
+    override = tmp_path / "AGENTS.override.md"
     override.touch()
 
-    assert adapter.locate_project_config(project_root) == [override]
+    assert adapter.locate_project_config(tmp_path) == []
+    assert not adapter.parse(base)
+    assert not adapter.parse(override)
+    assert {
+        Path(layer.file_path): layer.resolves
+        for layer in adapter.precedence_chain(tmp_path).layers
+        if Path(layer.file_path) in {base, override}
+    } == {base: False, override: False}
 
 
 def test_parse_returns_nothing_when_base_instructions_are_shadowed(
