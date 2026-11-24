@@ -190,3 +190,35 @@ def test_locates_skill_once_when_skill_tree_contains_symlink_cycle(
     (skill_directory / "loop").symlink_to(skills, target_is_directory=True)
 
     assert OpenCodeAdapter(config_directory=tmp_path).locate_global_config() == [skill]
+
+
+@pytest.mark.parametrize("scope_directory", ["user", "project", "project/.opencode"])
+def test_jsonc_takes_precedence_when_both_config_formats_exist(
+    tmp_path: Path, scope_directory: str
+) -> None:
+    directory = tmp_path / scope_directory
+    directory.mkdir(parents=True)
+    json_path = directory / "opencode.json"
+    json_path.write_text('{"mcp":{"example":{"type":"local","command":["json"]}}}')
+    jsonc_path = directory / "opencode.jsonc"
+    jsonc_path.write_text(
+        '{/* comment */"mcp":{"example":{"type":"local","command":["jsonc"]}},}'
+    )
+
+    adapter = OpenCodeAdapter(config_directory=tmp_path / "user")
+    project = tmp_path / "project"
+    paths = (
+        adapter.locate_global_config()
+        if scope_directory == "user"
+        else adapter.locate_project_config(project)
+    )
+    assert paths[:2] == [jsonc_path, json_path]
+    layers = [
+        layer.file_path
+        for layer in adapter.precedence_chain(project).layers
+        if layer.exists
+    ]
+    assert layers[:2] == [str(jsonc_path), str(json_path)]
+    assert adapter.parse(jsonc_path)[0].canonical_config == McpServerConfig(
+        command="jsonc"
+    )

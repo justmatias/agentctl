@@ -33,6 +33,8 @@ from agentctl.domain import (
 )
 from agentctl.utils import logger
 
+CONFIG_FILENAMES = ("opencode.jsonc", "opencode.json")
+
 
 def _default_config_directory() -> Path:
     config_home = os.environ.get("XDG_CONFIG_HOME")
@@ -77,7 +79,7 @@ class OpenCodeAdapter:
     @property
     def _global_candidates(self) -> list[Path]:
         return [
-            self.config_directory / "opencode.json",
+            *(self.config_directory / name for name in CONFIG_FILENAMES),
             self.config_directory / "AGENTS.md",
             *self._skill_paths(self.config_directory),
         ]
@@ -94,11 +96,14 @@ class OpenCodeAdapter:
         ]
         farthest_first = nearest_first[::-1]
         native_configs = [
-            (directory / ".opencode" / "opencode.json", origin)
+            (directory / ".opencode" / name, origin)
             for directory, origin in farthest_first
+            for name in CONFIG_FILENAMES
         ]
         project_configs = [
-            (directory / "opencode.json", origin) for directory, origin in nearest_first
+            (directory / name, origin)
+            for directory, origin in nearest_first
+            for name in CONFIG_FILENAMES
         ]
         instructions = [
             (directory / "AGENTS.md", origin) for directory, origin in nearest_first
@@ -159,7 +164,7 @@ class OpenCodeAdapter:
             )
         if path.name == "SKILL.md":
             return parse_skill(path, source=self.source)
-        if path.name != "opencode.json":
+        if path.name not in CONFIG_FILENAMES:
             return []
         try:
             data = loads(
