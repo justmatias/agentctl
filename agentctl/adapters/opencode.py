@@ -156,7 +156,10 @@ class OpenCodeAdapter:
             return None
 
     def parse(self, path: Path) -> list[Extension]:
-        if not path.is_file():
+        if (
+            path.name not in (*CONFIG_FILENAMES, "AGENTS.md", "SKILL.md")
+            or not path.is_file()
+        ):
             return []
         if path.name == "AGENTS.md":
             return parse_memory_file(
@@ -164,8 +167,6 @@ class OpenCodeAdapter:
             )
         if path.name == "SKILL.md":
             return parse_skill(path, source=self.source)
-        if path.name not in CONFIG_FILENAMES:
-            return []
         try:
             data = loads(
                 path.read_text(encoding="utf-8"), allow=COMMENTS | TRAILING_COMMA
