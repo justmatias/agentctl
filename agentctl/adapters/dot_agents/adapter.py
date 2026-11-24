@@ -26,7 +26,7 @@ from agentctl.domain import (
 )
 
 
-class _AnnotatedNativeLayers(BaseModel):
+class AnnotatedNativeLayers(BaseModel):
     layers: list[PrecedenceLayer]
     loaded_targets: set[Path]
 
@@ -101,7 +101,7 @@ class DotAgentsAdapter:
         native_layers: list[PrecedenceLayer],
         inventory_targets: set[Path],
         shared_roots: list[Path],
-    ) -> _AnnotatedNativeLayers:
+    ) -> AnnotatedNativeLayers:
         layers: list[PrecedenceLayer] = []
         loaded_targets: set[Path] = set()
         for layer in native_layers:
@@ -121,7 +121,7 @@ class DotAgentsAdapter:
                     updates["resolves"] = False
                 loaded_targets.add(target)
             layers.append(layer.model_copy(update=updates) if updates else layer)
-        return _AnnotatedNativeLayers(layers=layers, loaded_targets=loaded_targets)
+        return AnnotatedNativeLayers(layers=layers, loaded_targets=loaded_targets)
 
     def consumption_report(
         self, harness: SourceAdapter, project_root: Path | None
