@@ -95,15 +95,11 @@ def parse_mcp_servers_toml(path: Path, *, source: Source) -> list[Extension]:
 
 
 def parse_memory_file(
-    path: Path,
-    *,
-    source: Source,
-    is_persistent_memory: bool,
-    decoding_errors: str = "strict",
+    path: Path, *, source: Source, is_persistent_memory: bool
 ) -> list[Extension]:
     """Parse a whole markdown memory/instruction file (CLAUDE.md, AGENTS.md, …)."""
     canonical = MemoryFileConfig(
-        content=path.read_text(encoding="utf-8", errors=decoding_errors),
+        content=path.read_text(encoding="utf-8"),
         is_persistent_memory=is_persistent_memory,
     )
     return [

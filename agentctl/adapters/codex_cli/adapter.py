@@ -3,13 +3,12 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from itertools import count
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from agentctl.adapters.common import (
     consulted_file_layer,
     dispatch_serializer,
     parse_mcp_servers_toml,
-    parse_memory_file,
     platform_specific_path,
     project_directories,
 )
@@ -25,6 +24,7 @@ from agentctl.domain import (
     Extension,
     ExtensionType,
     LayerOrigin,
+    MemoryFileConfig,
     PrecedenceChain,
     PrecedenceLayer,
     Scope,
@@ -104,16 +104,17 @@ class CodexCliAdapter:
         return project_root / ".codex" / CONFIG_FILENAME
 
     @staticmethod
-    def _preferred_instructions_path(
+    def _select_instructions(
         directory: Path, *, scope: Scope
-    ) -> Path | None:
+    ) -> tuple[Path, str] | None:
         for filename in (INSTRUCTIONS_OVERRIDE_FILENAME, INSTRUCTIONS_FILENAME):
             path = directory / filename
             if not path.is_file():
                 continue
             try:
-                if path.read_text(encoding="utf-8", errors="replace").strip():
-                    return path
+                content = path.read_text(encoding="utf-8", errors="replace")
+                if content.strip():
+                    return path, content
             except OSError as error:
                 logger.warning(
                     f"Could not read Codex instructions from {path}: {error}"
@@ -128,40 +129,53 @@ class CodexCliAdapter:
             self.managed_config_path,
             self.system_config_path,
             self.user_config_path,
-            self._preferred_instructions_path(self.codex_home, scope=Scope.USER),
         ]
-        return [path for path in candidates if path is not None and path.is_file()]
+        paths = [path for path in candidates if path.is_file()]
+        selected = self._select_instructions(self.codex_home, scope=Scope.USER)
+        if selected is not None:
+            paths.append(selected[0])
+        return paths
 
     def locate_project_config(self, project_root: Path) -> list[Path]:
-        candidates = [
-            path
-            for directory in project_directories(project_root)
-            for path in (
-                self.project_config_path(directory),
-                self._preferred_instructions_path(directory, scope=Scope.PROJECT),
-            )
-        ]
-        return [path for path in candidates if path is not None and path.is_file()]
+        paths = []
+        for directory in project_directories(project_root):
+            config_path = self.project_config_path(directory)
+            if config_path.is_file():
+                paths.append(config_path)
+            selected = self._select_instructions(directory, scope=Scope.PROJECT)
+            if selected is not None:
+                paths.append(selected[0])
+        return paths
 
-    def parse(self, path: Path) -> list[Extension]:
+    def parse(
+        self, path: Path, *, scope: Literal[Scope.USER, Scope.PROJECT] | None = None
+    ) -> list[Extension]:
+        """Parse a file using its instruction scope if supplied.
+
+        Paths in Codex home default to user scope. Pass project scope when
+        parsing that directory as part of a project.
+        """
         if not path.is_file():
             return []
         if path.name in {INSTRUCTIONS_FILENAME, INSTRUCTIONS_OVERRIDE_FILENAME}:
-            scope = (
-                Scope.USER
-                if path.parent.resolve() == self.codex_home.resolve()
-                else Scope.PROJECT
-            )
-            if path != self._preferred_instructions_path(path.parent, scope=scope):
+            if scope is None:
+                scope = (
+                    Scope.USER
+                    if path.parent.resolve() == self.codex_home.resolve()
+                    else Scope.PROJECT
+                )
+            selected = self._select_instructions(path.parent, scope=scope)
+            if selected is None or selected[0] != path:
                 return []
-            # AGENTS.md is authored, not accumulated by the agent: Codex has no
-            # auto-memory file of its own (SPECS.md §15).
-            return parse_memory_file(
-                path,
-                source=self.source,
-                is_persistent_memory=False,
-                decoding_errors="replace",
-            )
+            return [
+                Extension(
+                    name=path.name,
+                    origin_harness=self.source,
+                    canonical_config=MemoryFileConfig(
+                        content=selected[1], is_persistent_memory=False
+                    ),
+                )
+            ]
         if path.suffix == ".toml":
             return parse_mcp_servers_toml(path, source=self.source)
         logger.warning(f"Codex CLI adapter has no parser for {path}")
@@ -203,7 +217,7 @@ class CodexCliAdapter:
         """
         override_path = directory / INSTRUCTIONS_OVERRIDE_FILENAME
         base_path = directory / INSTRUCTIONS_FILENAME
-        preferred_path = self._preferred_instructions_path(directory, scope=scope)
+        selected = self._select_instructions(directory, scope=scope)
         layers: list[PrecedenceLayer] = []
         for path in (override_path, base_path):
             exists = path.is_file()
@@ -214,7 +228,7 @@ class CodexCliAdapter:
                     exists=exists,
                     origin=origin,
                     order_rank=next(ranks),
-                    resolves=exists and path == preferred_path,
+                    resolves=exists and selected is not None and path == selected[0],
                 )
             )
         return layers

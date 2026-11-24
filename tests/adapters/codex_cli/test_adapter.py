@@ -139,6 +139,18 @@ def test_project_instructions_do_not_fall_back_when_override_is_blank(
     } == {base: False, override: False}
 
 
+def test_parse_respects_project_shadowing_when_codex_home_is_the_project(
+    adapter: CodexCliAdapter,
+) -> None:
+    adapter.codex_home.mkdir()
+    base = adapter.codex_home / "AGENTS.md"
+    base.write_text("Global base instructions")
+    (adapter.codex_home / "AGENTS.override.md").touch()
+
+    assert adapter.parse(base)
+    assert not adapter.parse(base, scope=Scope.PROJECT)
+
+
 def test_parse_returns_nothing_when_base_instructions_are_shadowed(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
@@ -261,6 +273,24 @@ def test_parse_loads_instructions_when_utf8_contains_invalid_bytes(
     canonical = extensions[0].canonical_config
     assert isinstance(canonical, MemoryFileConfig)
     assert canonical.content == "Project instructions \ufffd"
+
+
+def test_parse_uses_selected_content_when_instruction_file_disappears(
+    adapter: CodexCliAdapter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instructions = tmp_path / "AGENTS.md"
+    instructions.write_text("Project instructions")
+    read_text = Path.read_text
+
+    def read_instructions(path: Path, *args: str, **kwargs: str) -> str:
+        content = read_text(path, *args, **kwargs)
+        if path == instructions:
+            path.unlink()
+        return content
+
+    monkeypatch.setattr(Path, "read_text", read_instructions)
+
+    assert adapter.parse(instructions)
 
 
 def test_parse_returns_nothing_when_toml_is_malformed(
