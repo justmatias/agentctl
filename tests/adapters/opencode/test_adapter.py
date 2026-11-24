@@ -140,3 +140,23 @@ def test_parse_skips_skill_when_name_is_not_text(tmp_path: Path) -> None:
     )
 
     assert not OpenCodeAdapter(config_directory=tmp_path).parse(skill)
+
+
+def test_parses_mcp_server_when_json_has_comments_and_trailing_commas(
+    tmp_path: Path,
+) -> None:
+    config = tmp_path / "opencode.json"
+    config.write_text(
+        """
+        {
+          // The URL contains a literal double slash.
+          "mcp": {
+            "example": {"type": "remote", "url": "https://example.com/mcp",},
+          },
+        }
+        """
+    )
+
+    (extension,) = OpenCodeAdapter(config_directory=tmp_path).parse(config)
+
+    assert extension.canonical_config == McpServerConfig(url="https://example.com/mcp")

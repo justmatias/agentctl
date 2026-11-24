@@ -50,6 +50,7 @@ repos:
           - pyyaml==6.0.3
           - types-pyyaml==6.0.12.20260906
           - tomlkit==0.15.1
+          - jsonyx==2.5.0
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.4.1
@@ -66,3 +67,4 @@ repos:
           - pyyaml==6.0.3
           - types-pyyaml==6.0.12.20260906
           - tomlkit==0.15.1
+          - jsonyx==2.5.0

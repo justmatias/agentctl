@@ -1,9 +1,10 @@
-import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
+from jsonyx import TruncatedSyntaxError, loads
+from jsonyx.allow import COMMENTS, TRAILING_COMMA
 from pydantic import ValidationError
 
 from agentctl.adapters.common import (
@@ -70,9 +71,9 @@ def _parse_mcp_entry(name: str, entry: object, path: Path) -> Extension | None:
 
 def _parse_mcp_servers(path: Path) -> list[Extension]:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        logger.warning(f"Skipping malformed OpenCode JSON in {path}: {exc}")
+        data = loads(path.read_text(encoding="utf-8"), allow=COMMENTS | TRAILING_COMMA)
+    except (UnicodeDecodeError, TruncatedSyntaxError):
+        logger.warning(f"Skipping malformed OpenCode JSON in {path}")
         return []
     servers = data.get("mcp") if isinstance(data, dict) else None
     if not isinstance(servers, dict):

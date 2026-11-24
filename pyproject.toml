@@ -25,6 +25,7 @@ dependencies = [
   "typer>=0.27.3",
   "inject>=5.3.0",
   "tomlkit>=0.15.1",
+  "jsonyx>=2.5.0",
 ]
 
 [project.scripts]
