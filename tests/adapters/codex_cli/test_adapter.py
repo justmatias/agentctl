@@ -66,6 +66,26 @@ def test_locate_global_config_omits_base_instructions_when_shadowed(
     }
 
 
+@pytest.mark.parametrize("override_content", ["", " \n"])
+def test_global_instructions_fall_back_to_base_when_override_is_blank(
+    global_and_project_adapter: CodexCliAdapter, override_content: str
+) -> None:
+    adapter = global_and_project_adapter
+    base = adapter.codex_home / "AGENTS.md"
+    override = adapter.codex_home / "AGENTS.override.md"
+    override.write_text(override_content)
+
+    assert base in adapter.locate_global_config()
+    assert override not in adapter.locate_global_config()
+    assert adapter.parse(base)
+    assert not adapter.parse(override)
+    assert {
+        Path(layer.file_path): layer.resolves
+        for layer in adapter.precedence_chain(None).layers
+        if Path(layer.file_path) in {base, override}
+    } == {base: True, override: False}
+
+
 @pytest.mark.usefixtures("_write_machine_wide_configs")
 def test_locate_global_config_finds_administrator_owned_config(
     adapter: CodexCliAdapter,
@@ -101,12 +121,24 @@ def test_locate_project_config_omits_base_instructions_when_shadowed(
     assert adapter.locate_project_config(tmp_path) == [override]
 
 
+def test_project_instructions_keep_the_override_when_codex_home_overlaps(
+    adapter: CodexCliAdapter,
+) -> None:
+    project_root = adapter.codex_home
+    project_root.mkdir()
+    (project_root / "AGENTS.md").write_text("Global base instructions")
+    override = project_root / "AGENTS.override.md"
+    override.touch()
+
+    assert adapter.locate_project_config(project_root) == [override]
+
+
 def test_parse_returns_nothing_when_base_instructions_are_shadowed(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
-    assert global_and_project_adapter.parse(
-        global_and_project_adapter.codex_home / "AGENTS.md"
-    ) == []
+    base = global_and_project_adapter.codex_home / "AGENTS.md"
+
+    assert global_and_project_adapter.parse(base) == []
 
 
 def test_parse_extracts_mcp_server_from_config_toml(
@@ -438,7 +470,8 @@ def test_locate_project_config_stops_at_git_root_when_working_directory_is_neste
 def test_precedence_chain_lists_instructions_root_first_when_working_directory_is_nested(
     adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
 ) -> None:
-    working_directory, files = nested_project_files
+    working_directory, _ = nested_project_files
+    project_root = working_directory.parent.parent
 
     chain = adapter.precedence_chain(working_directory)
 
@@ -446,7 +479,13 @@ def test_precedence_chain_lists_instructions_root_first_when_working_directory_i
         Path(layer.file_path)
         for layer in chain.layers
         if layer.scope == Scope.PROJECT and layer.exists
-    ] == [*files[:2], *reversed(files[2:])]
+    ] == [
+        working_directory / ".codex" / "config.toml",
+        project_root / ".codex" / "config.toml",
+        project_root / "AGENTS.md",
+        working_directory.parent / "AGENTS.override.md",
+        working_directory / "AGENTS.md",
+    ]
 
 
 def test_precedence_chain_tags_ancestor_layers_when_working_directory_is_nested(

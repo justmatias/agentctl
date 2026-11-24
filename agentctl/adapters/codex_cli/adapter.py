@@ -104,18 +104,34 @@ class CodexCliAdapter:
         return project_root / ".codex" / CONFIG_FILENAME
 
     @staticmethod
-    def _preferred_instructions_path(directory: Path) -> Path:
-        override_path = directory / INSTRUCTIONS_OVERRIDE_FILENAME
-        return override_path if override_path.is_file() else directory / INSTRUCTIONS_FILENAME
+    def _preferred_instructions_path(
+        directory: Path, *, scope: Scope
+    ) -> Path | None:
+        for filename in (INSTRUCTIONS_OVERRIDE_FILENAME, INSTRUCTIONS_FILENAME):
+            path = directory / filename
+            if not path.is_file():
+                continue
+            # The global loader falls through to the next nonblank file.
+            if scope == Scope.USER:
+                try:
+                    if not path.read_text(encoding="utf-8", errors="replace").strip():
+                        continue
+                except OSError as error:
+                    logger.warning(
+                        f"Could not read Codex instructions from {path}: {error}"
+                    )
+                    continue
+            return path
+        return None
 
     def locate_global_config(self) -> list[Path]:
         candidates = [
             self.managed_config_path,
             self.system_config_path,
             self.user_config_path,
-            self._preferred_instructions_path(self.codex_home),
+            self._preferred_instructions_path(self.codex_home, scope=Scope.USER),
         ]
-        return [path for path in candidates if path.is_file()]
+        return [path for path in candidates if path is not None and path.is_file()]
 
     def locate_project_config(self, project_root: Path) -> list[Path]:
         candidates = [
@@ -123,16 +139,21 @@ class CodexCliAdapter:
             for directory in project_directories(project_root)
             for path in (
                 self.project_config_path(directory),
-                self._preferred_instructions_path(directory),
+                self._preferred_instructions_path(directory, scope=Scope.PROJECT),
             )
         ]
-        return [path for path in candidates if path.is_file()]
+        return [path for path in candidates if path is not None and path.is_file()]
 
     def parse(self, path: Path) -> list[Extension]:
         if not path.is_file():
             return []
         if path.name in {INSTRUCTIONS_FILENAME, INSTRUCTIONS_OVERRIDE_FILENAME}:
-            if path != self._preferred_instructions_path(path.parent):
+            scope = (
+                Scope.USER
+                if path.parent.resolve() == self.codex_home.resolve()
+                else Scope.PROJECT
+            )
+            if path != self._preferred_instructions_path(path.parent, scope=scope):
                 return []
             # AGENTS.md is authored, not accumulated by the agent: Codex has no
             # auto-memory file of its own (SPECS.md §15).
@@ -166,17 +187,21 @@ class CodexCliAdapter:
         )
 
     def _build_directory_instructions_layers(
-        self, directory: Path, *, scope: Scope, origin: LayerOrigin, ranks: Iterator[int]
+        self,
+        directory: Path,
+        *,
+        scope: Scope,
+        origin: LayerOrigin,
+        ranks: Iterator[int],
     ) -> list[PrecedenceLayer]:
         """The `AGENTS.override.md` / `AGENTS.md` pair one directory contributes.
 
-        Codex reads at most one instructions file per directory — the override
-        when it is there, the base file otherwise — so a base file shadowed by
-        an override exists on disk without ever resolving.
+        Only the selected file can resolve. Keep both candidates in the
+        inventory so an existing file that was skipped is still visible.
         """
         override_path = directory / INSTRUCTIONS_OVERRIDE_FILENAME
         base_path = directory / INSTRUCTIONS_FILENAME
-        preferred_path = self._preferred_instructions_path(directory)
+        preferred_path = self._preferred_instructions_path(directory, scope=scope)
         layers: list[PrecedenceLayer] = []
         for path in (override_path, base_path):
             exists = path.is_file()
