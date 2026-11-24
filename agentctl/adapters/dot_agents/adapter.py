@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
+from pydantic import BaseModel
+
 from agentctl.adapters.common import parse_memory_file, serialize_memory_file
 from agentctl.adapters.protocol import (
     AdapterCapabilities,
@@ -22,6 +24,11 @@ from agentctl.domain import (
     Source,
     UnconfirmedLayer,
 )
+
+
+class AnnotatedNativeLayers(BaseModel):
+    layers: list[PrecedenceLayer]
+    loaded_targets: set[Path]
 
 
 @dataclass(kw_only=True)
@@ -94,7 +101,7 @@ class DotAgentsAdapter:
         native_layers: list[PrecedenceLayer],
         inventory_targets: set[Path],
         shared_roots: list[Path],
-    ) -> tuple[list[PrecedenceLayer], set[Path]]:
+    ) -> AnnotatedNativeLayers:
         layers: list[PrecedenceLayer] = []
         loaded_targets: set[Path] = set()
         for layer in native_layers:
@@ -114,7 +121,7 @@ class DotAgentsAdapter:
                     updates["resolves"] = False
                 loaded_targets.add(target)
             layers.append(layer.model_copy(update=updates) if updates else layer)
-        return layers, loaded_targets
+        return AnnotatedNativeLayers(layers=layers, loaded_targets=loaded_targets)
 
     def consumption_report(
         self, harness: SourceAdapter, project_root: Path | None
@@ -130,18 +137,19 @@ class DotAgentsAdapter:
             for path in (Path(layer.file_path) for layer in shared_layers)
             if any(path.is_relative_to(directory) for directory in shared_directories)
         }
-        layers, loaded_targets = self._annotate_native_layers(
+        annotated = self._annotate_native_layers(
             native.layers,
             set(inventory_paths.values()),
             [directory.resolve() for directory in shared_directories],
         )
 
+        layers = annotated.layers
         native_paths = {Path(layer.file_path).absolute() for layer in native.layers}
         for layer in shared_layers:
             path = Path(layer.file_path)
             if path.absolute() in native_paths:
                 continue
-            if inventory_paths.get(path) in loaded_targets:
+            if inventory_paths.get(path) in annotated.loaded_targets:
                 continue
             # Claude's native instruction discovery excludes .agents directories.
             # https://code.claude.com/docs/en/memory#when-claude-code-reads-agents-md

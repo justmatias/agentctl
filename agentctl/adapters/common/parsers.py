@@ -135,7 +135,9 @@ def parse_skill(path: Path, *, source: Source) -> list[Extension]:
             body=body.strip(),
             bundled_files=bundled_files,
         )
+        return [
+            Extension(name=name, origin_harness=source, canonical_config=canonical)
+        ]
     except ValidationError as exc:
         logger.warning(f"Skipping {path}: invalid skill shape: {exc}")
         return []
-    return [Extension(name=name, origin_harness=source, canonical_config=canonical)]

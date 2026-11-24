@@ -11,6 +11,7 @@ from agentctl.adapters.common import (
     parse_mcp_servers_toml,
     parse_memory_file,
     platform_specific_path,
+    project_directories,
 )
 from agentctl.adapters.protocol import (
     AdapterCapabilities,
@@ -46,16 +47,6 @@ def default_codex_home() -> Path:
     """Codex's home directory: `~/.codex` unless `CODEX_HOME` overrides it."""
     override = os.environ.get(CODEX_HOME_VARIABLE)
     return Path(override) if override else Path.home() / ".codex"
-
-
-def _project_directories(working_directory: Path) -> tuple[Path, ...]:
-    directory = working_directory.resolve()
-    directories = (directory, *directory.parents)
-    for index, candidate in enumerate(directories):
-        git_marker = candidate / ".git"
-        if git_marker.is_file() or (git_marker / "HEAD").is_file():
-            return directories[: index + 1]
-    return (working_directory,)
 
 
 @dataclass(kw_only=True)
@@ -125,7 +116,7 @@ class CodexCliAdapter:
     def locate_project_config(self, project_root: Path) -> list[Path]:
         candidates = [
             path
-            for directory in _project_directories(project_root)
+            for directory in project_directories(project_root)
             for path in (
                 self.project_config_path(directory),
                 directory / INSTRUCTIONS_OVERRIDE_FILENAME,
@@ -231,7 +222,7 @@ class CodexCliAdapter:
                 resolves=False,
             ),
         ]
-        directories = _project_directories(project_root) if project_root is not None else ()
+        directories = project_directories(project_root) if project_root is not None else ()
         directory_origins = [
             (directory, LayerOrigin.ANCESTOR_DIR if index else LayerOrigin.REGISTERED_PROJECT)
             for index, directory in enumerate(directories)

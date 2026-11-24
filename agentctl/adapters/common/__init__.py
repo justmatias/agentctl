@@ -1,4 +1,4 @@
-from .layers import consulted_file_layer
+from .layers import consulted_file_layer, project_directories
 from .parsers import (
     parse_mcp_servers_json,
     parse_mcp_servers_toml,
@@ -24,6 +24,7 @@ __all__ = [
     "parse_memory_file",
     "parse_skill",
     "platform_specific_path",
+    "project_directories",
     "serialize_mcp_server_json",
     "serialize_mcp_server_toml",
     "serialize_memory_file",

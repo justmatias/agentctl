@@ -18,6 +18,7 @@ from .common import (
 from .cursor import CursorAdapter
 from .dot_agents import DotAgentsAdapter
 from .fake import NullAdapter
+from .opencode import OpenCodeAdapter
 from .protocol import (
     AdapterCapabilities,
     MergeSemantics,
@@ -37,6 +38,7 @@ __all__ = [
     "DotAgentsAdapter",
     "MergeSemantics",
     "NullAdapter",
+    "OpenCodeAdapter",
     "Serializer",
     "SourceAdapter",
     "WalkUpBehavior",
