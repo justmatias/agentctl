@@ -250,3 +250,39 @@ def nested_project_files(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("Example instructions" if path.suffix == ".md" else "")
     return working_directory, files
+
+
+@pytest.fixture(params=["", " \n"], ids=["empty", "whitespace"])
+def _blank_global_override(
+    global_and_project_adapter: CodexCliAdapter, request: pytest.FixtureRequest
+) -> None:
+    override = global_and_project_adapter.codex_home / "AGENTS.override.md"
+    override.write_text(request.param)
+
+
+@pytest.fixture
+def project_with_blank_override(tmp_path: Path) -> Path:
+    (tmp_path / "AGENTS.md").write_text("Project base instructions")
+    (tmp_path / "AGENTS.override.md").touch()
+    return tmp_path
+
+
+@pytest.fixture
+def instructions_file(tmp_path: Path) -> Path:
+    path = tmp_path / "AGENTS.md"
+    path.write_text("Project instructions")
+    return path
+
+
+@pytest.fixture
+def _remove_instructions_after_read(
+    instructions_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def read_instructions(path: Path, *, encoding: str, errors: str) -> str:
+        with path.open(encoding=encoding, errors=errors) as stream:
+            content = stream.read()
+        if path == instructions_file:
+            path.unlink()
+        return content
+
+    monkeypatch.setattr(Path, "read_text", read_instructions)

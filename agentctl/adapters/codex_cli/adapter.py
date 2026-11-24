@@ -221,6 +221,7 @@ class CodexCliAdapter:
         layers: list[PrecedenceLayer] = []
         for path in (override_path, base_path):
             exists = path.is_file()
+            resolves = exists and selected is not None and path == selected[0]
             layers.append(
                 ConsultedLayer(
                     scope=scope,
@@ -228,7 +229,7 @@ class CodexCliAdapter:
                     exists=exists,
                     origin=origin,
                     order_rank=next(ranks),
-                    resolves=exists and selected is not None and path == selected[0],
+                    resolves=resolves,
                 )
             )
         return layers

@@ -66,24 +66,43 @@ def test_locate_global_config_omits_base_instructions_when_shadowed(
     }
 
 
-@pytest.mark.parametrize("override_content", ["", " \n"])
-def test_global_instructions_fall_back_to_base_when_override_is_blank(
-    global_and_project_adapter: CodexCliAdapter, override_content: str
+@pytest.mark.usefixtures("_blank_global_override")
+def test_locate_global_config_selects_base_when_override_is_blank(
+    global_and_project_adapter: CodexCliAdapter,
 ) -> None:
     adapter = global_and_project_adapter
-    base = adapter.codex_home / "AGENTS.md"
-    override = adapter.codex_home / "AGENTS.override.md"
-    override.write_text(override_content)
 
-    assert base in adapter.locate_global_config()
-    assert override not in adapter.locate_global_config()
-    assert adapter.parse(base)
-    assert not adapter.parse(override)
-    assert {
-        Path(layer.file_path): layer.resolves
-        for layer in adapter.precedence_chain(None).layers
-        if Path(layer.file_path) in {base, override}
-    } == {base: True, override: False}
+    assert adapter.locate_global_config() == [
+        adapter.user_config_path,
+        adapter.codex_home / "AGENTS.md",
+    ]
+
+
+@pytest.mark.usefixtures("_blank_global_override")
+def test_parse_selects_global_base_when_override_is_blank(
+    global_and_project_adapter: CodexCliAdapter,
+) -> None:
+    adapter = global_and_project_adapter
+
+    assert adapter.parse(adapter.codex_home / "AGENTS.md")
+    assert not adapter.parse(adapter.codex_home / "AGENTS.override.md")
+
+
+@pytest.mark.usefixtures("_blank_global_override")
+def test_precedence_chain_resolves_global_base_when_override_is_blank(
+    global_and_project_adapter: CodexCliAdapter,
+) -> None:
+    adapter = global_and_project_adapter
+    chain = adapter.precedence_chain(None)
+    instruction_layers = chain.layers[-2:]
+    resolution = [
+        (Path(layer.file_path), layer.resolves) for layer in instruction_layers
+    ]
+
+    assert resolution == [
+        (adapter.codex_home / "AGENTS.override.md", False),
+        (adapter.codex_home / "AGENTS.md", True),
+    ]
 
 
 @pytest.mark.usefixtures("_write_machine_wide_configs")
@@ -121,22 +140,32 @@ def test_locate_project_config_omits_base_instructions_when_shadowed(
     assert adapter.locate_project_config(tmp_path) == [override]
 
 
-def test_project_instructions_do_not_fall_back_when_override_is_blank(
-    adapter: CodexCliAdapter, tmp_path: Path
+def test_locate_project_config_omits_instructions_when_override_is_blank(
+    adapter: CodexCliAdapter, project_with_blank_override: Path
 ) -> None:
-    base = tmp_path / "AGENTS.md"
-    base.write_text("Project base instructions")
-    override = tmp_path / "AGENTS.override.md"
-    override.touch()
+    assert adapter.locate_project_config(project_with_blank_override) == []
 
-    assert adapter.locate_project_config(tmp_path) == []
-    assert not adapter.parse(base)
-    assert not adapter.parse(override)
-    assert {
-        Path(layer.file_path): layer.resolves
-        for layer in adapter.precedence_chain(tmp_path).layers
-        if Path(layer.file_path) in {base, override}
-    } == {base: False, override: False}
+
+def test_parse_omits_project_instructions_when_override_is_blank(
+    adapter: CodexCliAdapter, project_with_blank_override: Path
+) -> None:
+    assert not adapter.parse(project_with_blank_override / "AGENTS.md")
+    assert not adapter.parse(project_with_blank_override / "AGENTS.override.md")
+
+
+def test_precedence_chain_resolves_no_project_instructions_when_override_is_blank(
+    adapter: CodexCliAdapter, project_with_blank_override: Path
+) -> None:
+    chain = adapter.precedence_chain(project_with_blank_override)
+    instruction_layers = chain.layers[-2:]
+    resolution = [
+        (Path(layer.file_path), layer.resolves) for layer in instruction_layers
+    ]
+
+    assert resolution == [
+        (project_with_blank_override / "AGENTS.override.md", False),
+        (project_with_blank_override / "AGENTS.md", False),
+    ]
 
 
 def test_parse_respects_project_shadowing_when_codex_home_is_the_project(
@@ -275,22 +304,11 @@ def test_parse_loads_instructions_when_utf8_contains_invalid_bytes(
     assert canonical.content == "Project instructions \ufffd"
 
 
+@pytest.mark.usefixtures("_remove_instructions_after_read")
 def test_parse_uses_selected_content_when_instruction_file_disappears(
-    adapter: CodexCliAdapter, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    adapter: CodexCliAdapter, instructions_file: Path
 ) -> None:
-    instructions = tmp_path / "AGENTS.md"
-    instructions.write_text("Project instructions")
-
-    def read_instructions(path: Path, *, encoding: str, errors: str) -> str:
-        with path.open(encoding=encoding, errors=errors) as stream:
-            content = stream.read()
-        if path == instructions:
-            path.unlink()
-        return content
-
-    monkeypatch.setattr(Path, "read_text", read_instructions)
-
-    extension, = adapter.parse(instructions)
+    extension, = adapter.parse(instructions_file)
     canonical = extension.canonical_config
     assert isinstance(canonical, MemoryFileConfig)
     assert canonical.content == "Project instructions"
