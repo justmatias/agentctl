@@ -8,7 +8,7 @@ from typing import NamedTuple
 
 from sqlmodel import col, select
 
-from agentctl.adapters import AdapterRegistry
+from agentctl.adapters import AdapterRegistry, SourceAdapter
 from agentctl.domain import (
     Binding,
     Extension,
@@ -67,18 +67,8 @@ class CoreService:
         for adapter in self.registry.list():
             for location in sorted(set(adapter.locate_scoped_global_config())):
                 path = location.path.absolute()
-                try:
-                    extensions = adapter.parse(path, scope=location.scope)
-                except (OSError, UnicodeDecodeError) as error:
-                    logger.warning(
-                        f"Skipping unreadable config {path}: {type(error).__name__}"
-                    )
-                    continue
-                if not extensions and not path.exists():
-                    logger.warning(
-                        f"Skipping config that disappeared during scan: {path}"
-                    )
-                for extension in extensions:
+                for observation in _read_observations(adapter, path, location.scope):
+                    extension = observation.extension
                     key = InventoryKey(
                         adapter.source,
                         location.scope,
@@ -86,16 +76,7 @@ class CoreService:
                         extension.type,
                         extension.name,
                     )
-                    try:
-                        content_hash = _hash_config(path, extension)
-                    except OSError as error:
-                        logger.warning(
-                            f"Skipping unreadable bundle for {path}: {type(error).__name__}"
-                        )
-                        continue
-                    discovered.setdefault(
-                        key, InventoryObservation(extension, content_hash)
-                    )
+                    discovered.setdefault(key, observation)
         return discovered
 
     def _store_observations(
@@ -176,6 +157,28 @@ class CoreService:
             binding=binding,
             classification=_classify_binding(binding.sync_state),
         )
+
+
+def _read_observations(
+    adapter: SourceAdapter, path: Path, scope: Scope
+) -> list[InventoryObservation]:
+    try:
+        extensions = adapter.parse(path, scope=scope)
+    except (OSError, UnicodeDecodeError) as error:
+        logger.warning(f"Skipping unreadable config {path}: {type(error).__name__}")
+        return []
+    if not extensions and not path.exists():
+        logger.warning(f"Skipping config that disappeared during scan: {path}")
+
+    observations = []
+    for extension in extensions:
+        try:
+            content_hash = _hash_config(path, extension)
+        except OSError as error:
+            logger.warning(f"Skipping unreadable bundle for {path}: {type(error).__name__}")
+            continue
+        observations.append(InventoryObservation(extension, content_hash))
+    return observations
 
 
 def _hash_config(path: Path, extension: Extension) -> str:
