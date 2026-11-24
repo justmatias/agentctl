@@ -47,7 +47,7 @@ def test_discovers_canonical_extensions_when_opencode_is_configured(
 def test_parse_returns_no_extensions_when_config_is_malformed(tmp_path: Path) -> None:
     config = tmp_path / "opencode.json"
     config.write_text('{"mcp":')
-    assert OpenCodeAdapter(config_directory=tmp_path).parse(config) == []
+    assert not OpenCodeAdapter(config_directory=tmp_path).parse(config)
 
 
 def test_chain_orders_native_files_when_git_project_is_nested(tmp_path: Path) -> None:
@@ -93,4 +93,4 @@ def test_parse_skips_skill_when_name_is_not_text(tmp_path: Path) -> None:
         "---\nname: [unexpected]\ndescription: Review code\n---\nReview.\n"
     )
 
-    assert OpenCodeAdapter(config_directory=tmp_path).parse(skill) == []
+    assert not OpenCodeAdapter(config_directory=tmp_path).parse(skill)
