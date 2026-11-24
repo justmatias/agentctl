@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass, field
+from itertools import count
 from pathlib import Path
 from typing import ClassVar
 
@@ -26,6 +27,7 @@ from agentctl.domain import (
     LayerOrigin,
     McpServerConfig,
     PrecedenceChain,
+    PrecedenceLayer,
     Scope,
     Source,
 )
@@ -126,7 +128,7 @@ class OpenCodeAdapter:
 
     @staticmethod
     def _project_candidates(project_root: Path) -> list[tuple[Path, LayerOrigin]]:
-        directories = [
+        nearest_first = [
             (
                 directory,
                 LayerOrigin.ANCESTOR_DIR if index else LayerOrigin.REGISTERED_PROJECT,
@@ -135,22 +137,23 @@ class OpenCodeAdapter:
                 project_directories(project_root, ascend_outside_git=True)
             )
         ]
-        return [
-            *(
-                (directory / ".opencode" / "opencode.json", origin)
-                for directory, origin in reversed(directories)
-            ),
-            *(
-                (directory / "opencode.json", origin)
-                for directory, origin in directories
-            ),
-            *((directory / "AGENTS.md", origin) for directory, origin in directories),
-            *(
-                (path, origin)
-                for directory, origin in reversed(directories)
-                for path in _skill_paths(directory / ".opencode")
-            ),
+        farthest_first = nearest_first[::-1]
+        native_configs = [
+            (directory / ".opencode" / "opencode.json", origin)
+            for directory, origin in farthest_first
         ]
+        project_configs = [
+            (directory / "opencode.json", origin) for directory, origin in nearest_first
+        ]
+        instructions = [
+            (directory / "AGENTS.md", origin) for directory, origin in nearest_first
+        ]
+        skills = [
+            (path, origin)
+            for directory, origin in farthest_first
+            for path in _skill_paths(directory / ".opencode")
+        ]
+        return native_configs + project_configs + instructions + skills
 
     def locate_global_config(self) -> list[Path]:
         return [path for path in self._global_candidates() if path.is_file()]
@@ -190,21 +193,25 @@ class OpenCodeAdapter:
         )
 
     def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
-        candidates = []
+        ranks = count(1)
+        layers: list[PrecedenceLayer] = []
         if project_root is not None:
-            candidates.extend(
-                (path, Scope.PROJECT, origin)
+            layers.extend(
+                consulted_file_layer(
+                    scope=Scope.PROJECT,
+                    path=path,
+                    origin=origin,
+                    order_rank=next(ranks),
+                )
                 for path, origin in self._project_candidates(project_root)
             )
-        candidates.extend(
-            (path, Scope.USER, LayerOrigin.GLOBAL) for path in self._global_candidates()
+        layers.extend(
+            consulted_file_layer(
+                scope=Scope.USER,
+                path=path,
+                origin=LayerOrigin.GLOBAL,
+                order_rank=next(ranks),
+            )
+            for path in self._global_candidates()
         )
-        return PrecedenceChain(
-            source=self.source,
-            layers=[
-                consulted_file_layer(
-                    scope=scope, path=path, origin=origin, order_rank=rank
-                )
-                for rank, (path, scope, origin) in enumerate(candidates, start=1)
-            ],
-        )
+        return PrecedenceChain(source=self.source, layers=layers)
