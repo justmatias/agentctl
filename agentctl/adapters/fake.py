@@ -44,7 +44,8 @@ class NullAdapter:
         return []
 
     @staticmethod
-    def parse(_path: Path) -> list[Extension]:
+    def parse(_path: Path, *, scope: Scope | None = None) -> list[Extension]:
+        del scope
         return []
 
     @staticmethod

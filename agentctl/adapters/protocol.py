@@ -76,13 +76,16 @@ class SourceAdapter(Protocol):
         """
 
     def locate_global_config(self) -> list[Path]:
-        """Every global-scope config path this source actually has on disk."""
+        """Global-scope config files available for parsing."""
 
     def locate_project_config(self, project_root: Path) -> list[Path]:
-        """Every project-scope config path this source has under `project_root`."""
+        """Project-scope config files available for parsing from `project_root`."""
 
-    def parse(self, path: Path) -> list[Extension]:
-        """Parse a located file into canonical Extension records."""
+    def parse(self, path: Path, *, scope: Scope | None = None) -> list[Extension]:
+        """Parse a located file into canonical Extension records.
+
+        Pass the discovery scope when a path can belong to multiple scopes.
+        """
 
     def serialize(self, extension: Extension) -> str:
         """Render a canonical Extension into this source's native format."""

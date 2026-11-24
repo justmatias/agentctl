@@ -18,9 +18,10 @@ from agentctl.domain import (
     Scope,
     Source,
 )
+from tests.adapters.codex_cli.conftest import NestedProjectFiles
 
 
-def test_adapter_implements_the_source_adapter_protocol(
+def test_adapter_implements_the_source_protocol_when_instantiated(
     adapter: CodexCliAdapter,
 ) -> None:
     assert isinstance(adapter, SourceAdapter)
@@ -44,7 +45,7 @@ def test_locate_project_config_finds_nothing_when_nothing_installed(
     assert located == []
 
 
-def test_locate_global_config_finds_every_global_scope_file(
+def test_locate_global_config_finds_user_files_when_present(
     global_only_adapter: CodexCliAdapter,
 ) -> None:
     codex_home = global_only_adapter.codex_home
@@ -55,7 +56,7 @@ def test_locate_global_config_finds_every_global_scope_file(
     }
 
 
-def test_locate_global_config_finds_the_instructions_override(
+def test_locate_global_config_omits_base_instructions_when_shadowed(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
     codex_home = global_and_project_adapter.codex_home
@@ -63,12 +64,33 @@ def test_locate_global_config_finds_the_instructions_override(
     assert set(global_and_project_adapter.locate_global_config()) == {
         codex_home / "config.toml",
         codex_home / "AGENTS.override.md",
-        codex_home / "AGENTS.md",
     }
 
 
+@pytest.mark.usefixtures("_write_blank_global_override")
+def test_locate_global_config_selects_base_when_override_is_blank(
+    global_and_project_adapter: CodexCliAdapter,
+) -> None:
+    adapter = global_and_project_adapter
+
+    assert adapter.locate_global_config() == [
+        adapter.user_config_path,
+        adapter.codex_home / "AGENTS.md",
+    ]
+
+
+@pytest.mark.usefixtures("_write_blank_global_override")
+def test_parse_selects_global_base_when_override_is_blank(
+    global_and_project_adapter: CodexCliAdapter,
+) -> None:
+    adapter = global_and_project_adapter
+
+    assert adapter.parse(adapter.codex_home / "AGENTS.md")
+    assert not adapter.parse(adapter.codex_home / "AGENTS.override.md")
+
+
 @pytest.mark.usefixtures("_write_machine_wide_configs")
-def test_locate_global_config_finds_administrator_owned_config(
+def test_locate_global_config_finds_administrator_owned_config_when_present(
     adapter: CodexCliAdapter,
 ) -> None:
     assert set(adapter.locate_global_config()) == {
@@ -77,7 +99,7 @@ def test_locate_global_config_finds_administrator_owned_config(
     }
 
 
-def test_locate_project_config_finds_every_project_scope_file(
+def test_locate_project_config_finds_project_files_when_present(
     global_and_project_adapter: CodexCliAdapter,
     global_and_project_project_root: Path,
 ) -> None:
@@ -91,7 +113,80 @@ def test_locate_project_config_finds_every_project_scope_file(
     }
 
 
-def test_parse_extracts_mcp_server_from_config_toml(
+def test_locate_project_config_omits_base_instructions_when_shadowed(
+    adapter: CodexCliAdapter, tmp_path: Path
+) -> None:
+    base = tmp_path / "AGENTS.md"
+    override = tmp_path / "AGENTS.override.md"
+    base.write_text("Base instructions")
+    override.write_text("Override instructions")
+
+    assert adapter.locate_project_config(tmp_path) == [override]
+
+
+def test_locate_project_config_omits_instructions_when_override_is_blank(
+    adapter: CodexCliAdapter, project_with_blank_override: Path
+) -> None:
+    assert adapter.locate_project_config(project_with_blank_override) == []
+
+
+def test_parse_omits_project_instructions_when_override_is_blank(
+    adapter: CodexCliAdapter, project_with_blank_override: Path
+) -> None:
+    assert not adapter.parse(project_with_blank_override / "AGENTS.md")
+    assert not adapter.parse(project_with_blank_override / "AGENTS.override.md")
+
+
+@pytest.mark.parametrize(
+    ("scope", "override_content", "base_resolves"),
+    [(Scope.USER, "", True), (Scope.USER, " \n", True), (Scope.PROJECT, "", False)],
+)
+def test_precedence_chain_selects_instructions_when_override_is_blank(
+    adapter: CodexCliAdapter,
+    tmp_path: Path,
+    scope: Scope,
+    override_content: str,
+    base_resolves: bool,
+) -> None:
+    directory = adapter.codex_home if scope == Scope.USER else tmp_path / "project"
+    directory.mkdir()
+    override = directory / "AGENTS.override.md"
+    override.write_text(override_content)
+    base = directory / "AGENTS.md"
+    base.write_text("Base instructions")
+    project_root = directory if scope == Scope.PROJECT else None
+
+    chain = adapter.precedence_chain(project_root)
+
+    assert [
+        (Path(layer.file_path), layer.resolves)
+        for layer in chain.layers
+        if layer.scope == scope and Path(layer.file_path) in {override, base}
+    ] == [(override, False), (base, base_resolves)]
+
+
+def test_parse_respects_project_shadowing_when_codex_home_is_the_project(
+    adapter: CodexCliAdapter,
+) -> None:
+    adapter.codex_home.mkdir()
+    base = adapter.codex_home / "AGENTS.md"
+    base.write_text("Global base instructions")
+    (adapter.codex_home / "AGENTS.override.md").touch()
+
+    source_adapter: SourceAdapter = adapter
+    assert source_adapter.parse(base, scope=Scope.USER)
+    assert not source_adapter.parse(base, scope=Scope.PROJECT)
+
+
+def test_parse_returns_nothing_when_base_instructions_are_shadowed(
+    global_and_project_adapter: CodexCliAdapter,
+) -> None:
+    base = global_and_project_adapter.codex_home / "AGENTS.md"
+
+    assert global_and_project_adapter.parse(base) == []
+
+
+def test_parse_extracts_mcp_server_when_config_toml_declares_one(
     global_only_adapter: CodexCliAdapter,
 ) -> None:
     extensions = global_only_adapter.parse(
@@ -113,7 +208,7 @@ def test_parse_extracts_mcp_server_from_config_toml(
     assert canonical.env == {"CONTEXT7_API_KEY": "${CONTEXT7_API_KEY}"}
 
 
-def test_parse_ignores_tables_that_are_not_mcp_servers(
+def test_parse_extracts_only_mcp_servers_when_other_tables_exist(
     global_only_adapter: CodexCliAdapter,
 ) -> None:
     """Top-level keys, arrays of tables (`[[hooks.SessionStart]]`) and nested
@@ -138,7 +233,7 @@ def test_parse_extracts_the_same_mcp_server_when_toml_spells_it_differently(
     assert canonical.env == {"TOKEN": "secret"}
 
 
-def test_parse_extracts_mcp_server_with_remote_transport(
+def test_parse_extracts_remote_transport_when_config_declares_a_url(
     global_and_project_adapter: CodexCliAdapter,
     global_and_project_project_root: Path,
 ) -> None:
@@ -162,7 +257,7 @@ def test_parse_returns_nothing_when_config_has_no_mcp_servers(
     assert not adapter.parse(config_path)
 
 
-def test_parse_extracts_project_instructions_file(
+def test_parse_extracts_project_instructions_when_base_file_exists(
     global_and_project_adapter: CodexCliAdapter,
     global_and_project_project_root: Path,
 ) -> None:
@@ -180,7 +275,7 @@ def test_parse_extracts_project_instructions_file(
     assert "Run `make test` before committing." in canonical.content
 
 
-def test_parse_extracts_instructions_override_file(
+def test_parse_extracts_override_instructions_when_override_file_exists(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
     override_path = global_and_project_adapter.codex_home / "AGENTS.override.md"
@@ -191,6 +286,30 @@ def test_parse_extracts_instructions_override_file(
     canonical = extensions[0].canonical_config
     assert isinstance(canonical, MemoryFileConfig)
     assert "Ship nothing to production this week." in canonical.content
+
+
+def test_parse_loads_instructions_when_utf8_contains_invalid_bytes(
+    adapter: CodexCliAdapter, tmp_path: Path
+) -> None:
+    override = tmp_path / "AGENTS.override.md"
+    override.write_bytes(b"Project instructions \xff")
+
+    extensions = adapter.parse(override)
+
+    assert len(extensions) == 1
+    canonical = extensions[0].canonical_config
+    assert isinstance(canonical, MemoryFileConfig)
+    assert canonical.content == "Project instructions \ufffd"
+
+
+@pytest.mark.usefixtures("_remove_instructions_after_read")
+def test_parse_uses_selected_content_when_instruction_file_disappears(
+    adapter: CodexCliAdapter, instructions_file: Path
+) -> None:
+    extension, = adapter.parse(instructions_file)
+    canonical = extension.canonical_config
+    assert isinstance(canonical, MemoryFileConfig)
+    assert canonical.content == "Project instructions"
 
 
 def test_parse_returns_nothing_when_toml_is_malformed(
@@ -236,7 +355,9 @@ def test_serialized_mcp_server_round_trips_through_parse_when_reparsed(
     assert reparsed[0].canonical_config == mcp_server_extension.canonical_config
 
 
-def test_serialize_memory_file_returns_raw_content(adapter: CodexCliAdapter) -> None:
+def test_serialize_returns_raw_content_when_extension_is_a_memory_file(
+    adapter: CodexCliAdapter,
+) -> None:
     canonical = MemoryFileConfig(content="# Hello\n", is_persistent_memory=False)
     extension = Extension(name="AGENTS.md", canonical_config=canonical)
 
@@ -252,7 +373,7 @@ def test_walk_up_behavior_matches_codex_contract_when_extension_type_varies(
     assert adapter.walk_up_behavior(extension_type) == expected
 
 
-def test_capabilities_declares_the_types_and_scopes_codex_has(
+def test_capabilities_reports_supported_types_and_scopes_when_accessed(
     adapter: CodexCliAdapter,
 ) -> None:
     capabilities = adapter.capabilities
@@ -283,10 +404,10 @@ def test_precedence_chain_lists_every_layer_in_precedence_order_when_project_giv
         (Scope.PROJECT, str(project_root / ".codex" / "config.toml")),
         (Scope.USER, str(adapter.user_config_path)),
         (Scope.MANAGED, str(adapter.system_config_path)),
-        (Scope.PROJECT, str(project_root / "AGENTS.override.md")),
-        (Scope.PROJECT, str(project_root / "AGENTS.md")),
         (Scope.USER, str(adapter.codex_home / "AGENTS.override.md")),
         (Scope.USER, str(adapter.codex_home / "AGENTS.md")),
+        (Scope.PROJECT, str(project_root / "AGENTS.override.md")),
+        (Scope.PROJECT, str(project_root / "AGENTS.md")),
     ]
 
 
@@ -299,7 +420,7 @@ def test_precedence_chain_numbers_layers_consecutively_when_project_given(
     assert [layer.order_rank for layer in chain.layers] == list(range(1, 10))  # type: ignore[union-attr]
 
 
-def test_precedence_chain_tags_project_layers_with_their_origin(
+def test_precedence_chain_tags_registered_origins_when_project_root_is_given(
     global_and_project_adapter: CodexCliAdapter,
     global_and_project_project_root: Path,
 ) -> None:
@@ -312,7 +433,7 @@ def test_precedence_chain_tags_project_layers_with_their_origin(
     )
 
 
-def test_precedence_chain_omits_project_layers_for_the_global_view(
+def test_precedence_chain_omits_project_layers_when_project_root_is_absent(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
     chain = global_and_project_adapter.precedence_chain(None)
@@ -337,7 +458,7 @@ def test_command_line_argument_layer_never_resolves_when_scanned_statically(
 
 
 @pytest.mark.usefixtures("_write_machine_wide_configs")
-def test_precedence_chain_reports_administrator_owned_config_as_existing(
+def test_precedence_chain_reports_administrator_owned_config_when_present(
     adapter: CodexCliAdapter,
 ) -> None:
     chain = adapter.precedence_chain(None)
@@ -350,7 +471,7 @@ def test_precedence_chain_reports_administrator_owned_config_as_existing(
     assert all(layer.exists and layer.resolves for layer in managed_layers)
 
 
-def test_instructions_override_shadows_the_agents_file_beside_it(
+def test_base_instructions_do_not_resolve_when_override_exists(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
     """Codex reads at most one instructions file per directory, so the user's
@@ -393,7 +514,7 @@ def test_managed_config_path_follows_platform_when_operating_system_varies(
     assert adapter.managed_config_path == expected_managed_config_path
 
 
-def test_default_codex_home_honors_the_codex_home_variable(
+def test_default_codex_home_uses_environment_path_when_variable_is_set(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "elsewhere"))
@@ -401,7 +522,7 @@ def test_default_codex_home_honors_the_codex_home_variable(
     assert default_codex_home() == tmp_path / "elsewhere"
 
 
-def test_default_codex_home_falls_back_to_the_dot_codex_directory(
+def test_default_codex_home_uses_dot_codex_when_variable_is_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("CODEX_HOME", raising=False)
@@ -410,17 +531,19 @@ def test_default_codex_home_falls_back_to_the_dot_codex_directory(
 
 
 def test_locate_project_config_stops_at_git_root_when_working_directory_is_nested(
-    adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
+    adapter: CodexCliAdapter, nested_project_files: NestedProjectFiles
 ) -> None:
-    working_directory, files = nested_project_files
+    working_directory = nested_project_files.working_directory
+    files = nested_project_files.files
 
     assert set(adapter.locate_project_config(working_directory)) == set(files)
 
 
-def test_precedence_chain_lists_nearest_files_first_when_working_directory_is_nested(
-    adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
+def test_precedence_chain_lists_instructions_root_first_when_working_directory_is_nested(
+    adapter: CodexCliAdapter, nested_project_files: NestedProjectFiles
 ) -> None:
-    working_directory, files = nested_project_files
+    working_directory = nested_project_files.working_directory
+    project_root = nested_project_files.root
 
     chain = adapter.precedence_chain(working_directory)
 
@@ -428,13 +551,20 @@ def test_precedence_chain_lists_nearest_files_first_when_working_directory_is_ne
         Path(layer.file_path)
         for layer in chain.layers
         if layer.scope == Scope.PROJECT and layer.exists
-    ] == files
+    ] == [
+        working_directory / ".codex" / "config.toml",
+        project_root / ".codex" / "config.toml",
+        project_root / "AGENTS.md",
+        working_directory.parent / "AGENTS.override.md",
+        working_directory / "AGENTS.md",
+    ]
 
 
 def test_precedence_chain_tags_ancestor_layers_when_working_directory_is_nested(
-    adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
+    adapter: CodexCliAdapter, nested_project_files: NestedProjectFiles
 ) -> None:
-    working_directory, files = nested_project_files
+    working_directory = nested_project_files.working_directory
+    files = nested_project_files.files
 
     chain = adapter.precedence_chain(working_directory)
 
