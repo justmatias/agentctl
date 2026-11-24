@@ -28,44 +28,47 @@ from agentctl.domain import (
 )
 
 
-def _configuration_paths(root: Path) -> list[Path]:
-    return [
-        root / ".cursor" / "mcp.json",
-        *sorted((root / ".cursor" / "skills").glob("**/*/SKILL.md")),
-        *sorted((root / ".agents" / "skills").glob("**/*/SKILL.md")),
-    ]
-
-
-def _project_paths(project_root: Path) -> list[Path]:
-    return [
-        *_configuration_paths(project_root),
-        *sorted((project_root / ".cursor" / "rules").rglob("*.mdc")),
-        project_root / "AGENTS.md",
-        project_root / ".cursorrules",
-    ]
-
-
 @dataclass(kw_only=True)
 class CursorAdapter:
     source: ClassVar[Source] = Source.CURSOR
-    capabilities: ClassVar[AdapterCapabilities] = AdapterCapabilities(
-        source=Source.CURSOR,
-        extension_types=frozenset({
-            ExtensionType.MCP_SERVER,
-            ExtensionType.MEMORY_FILE,
-            ExtensionType.SKILL,
-        }),
-        scopes=frozenset({Scope.PROJECT, Scope.USER}),
-        workflow_target_forms=frozenset({WorkflowTargetForm.SKILL}),
-    )
     home: Path = field(default_factory=Path.home)
 
-    def locate_global_config(self) -> list[Path]:
-        return [path for path in _configuration_paths(self.home) if path.is_file()]
+    @property
+    def capabilities(self) -> AdapterCapabilities:
+        return AdapterCapabilities(
+            source=self.source,
+            extension_types=frozenset({
+                ExtensionType.MCP_SERVER,
+                ExtensionType.MEMORY_FILE,
+                ExtensionType.SKILL,
+            }),
+            scopes=frozenset({Scope.PROJECT, Scope.USER}),
+            workflow_target_forms=frozenset({WorkflowTargetForm.SKILL}),
+        )
 
     @staticmethod
-    def locate_project_config(project_root: Path) -> list[Path]:
-        return [path for path in _project_paths(project_root) if path.is_file()]
+    def _candidate_paths(root: Path, scope: Scope) -> list[Path]:
+        cursor_directory = root / ".cursor"
+        paths = [
+            cursor_directory / "mcp.json",
+            *sorted((cursor_directory / "skills").glob("**/*/SKILL.md")),
+            *sorted((root / ".agents" / "skills").glob("**/*/SKILL.md")),
+        ]
+        if scope == Scope.PROJECT:
+            paths.extend([
+                *sorted((cursor_directory / "rules").rglob("*.mdc")),
+                root / "AGENTS.md",
+                root / ".cursorrules",
+            ])
+        return paths
+
+    def locate_global_config(self) -> list[Path]:
+        candidates = self._candidate_paths(self.home, Scope.USER)
+        return [path for path in candidates if path.is_file()]
+
+    def locate_project_config(self, project_root: Path) -> list[Path]:
+        candidates = self._candidate_paths(project_root, Scope.PROJECT)
+        return [path for path in candidates if path.is_file()]
 
     def parse(self, path: Path) -> list[Extension]:
         if not path.is_file():
@@ -101,24 +104,22 @@ class CursorAdapter:
         if project_root is not None:
             locations.append((
                 project_root,
-                _project_paths(project_root),
                 Scope.PROJECT,
                 LayerOrigin.REGISTERED_PROJECT,
             ))
         locations.append((
             self.home,
-            _configuration_paths(self.home),
             Scope.USER,
             LayerOrigin.GLOBAL,
         ))
 
         layers: list[PrecedenceLayer] = []
-        for rank, (root, paths, scope, origin) in enumerate(locations, start=1):
+        for rank, (root, scope, origin) in enumerate(locations, start=1):
             layers.extend(
                 consulted_file_layer(
                     scope=scope, path=path, origin=origin, order_rank=rank
                 )
-                for path in paths
+                for path in self._candidate_paths(root, scope)
             )
             # Cursor documents nested AGENTS.md for files in that subtree, but
             # does not document a shared .agents/AGENTS.md loaded project-wide.
