@@ -44,20 +44,17 @@ def _default_config_directory() -> Path:
 @dataclass(kw_only=True)
 class OpenCodeAdapter:
     source: ClassVar[Source] = Source.OPENCODE
+    capabilities: ClassVar[AdapterCapabilities] = AdapterCapabilities(
+        source=Source.OPENCODE,
+        extension_types=frozenset({
+            ExtensionType.MCP_SERVER,
+            ExtensionType.MEMORY_FILE,
+            ExtensionType.SKILL,
+        }),
+        scopes=frozenset({Scope.USER, Scope.PROJECT}),
+        workflow_target_forms=frozenset({WorkflowTargetForm.SKILL}),
+    )
     config_directory: Path = field(default_factory=_default_config_directory)
-
-    @property
-    def capabilities(self) -> AdapterCapabilities:
-        return AdapterCapabilities(
-            source=self.source,
-            extension_types=frozenset({
-                ExtensionType.MCP_SERVER,
-                ExtensionType.MEMORY_FILE,
-                ExtensionType.SKILL,
-            }),
-            scopes=frozenset({Scope.USER, Scope.PROJECT}),
-            workflow_target_forms=frozenset({WorkflowTargetForm.SKILL}),
-        )
 
     @staticmethod
     def _skill_paths(config_directory: Path) -> list[Path]:
