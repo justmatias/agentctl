@@ -5,6 +5,8 @@ from itertools import count
 from pathlib import Path
 from typing import ClassVar, Literal
 
+from pydantic import BaseModel
+
 from agentctl.adapters.common import (
     consulted_file_layer,
     dispatch_serializer,
@@ -41,6 +43,11 @@ MANAGED_CONFIG_FILENAME = "managed_config.toml"
 INSTRUCTIONS_FILENAME = "AGENTS.md"
 INSTRUCTIONS_OVERRIDE_FILENAME = "AGENTS.override.md"
 COMMAND_LINE_ARGUMENTS = "(command-line arguments)"
+
+
+class _SelectedInstructions(BaseModel):
+    path: Path
+    content: str
 
 
 def default_codex_home() -> Path:
@@ -106,7 +113,7 @@ class CodexCliAdapter:
     @staticmethod
     def _select_instructions(
         directory: Path, *, scope: Scope
-    ) -> tuple[Path, str] | None:
+    ) -> _SelectedInstructions | None:
         for filename in (INSTRUCTIONS_OVERRIDE_FILENAME, INSTRUCTIONS_FILENAME):
             path = directory / filename
             if not path.is_file():
@@ -114,7 +121,7 @@ class CodexCliAdapter:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
                 if content.strip():
-                    return path, content
+                    return _SelectedInstructions(path=path, content=content)
             except OSError as error:
                 logger.warning(
                     f"Could not read Codex instructions from {path}: {error}"
@@ -133,7 +140,7 @@ class CodexCliAdapter:
         paths = [path for path in candidates if path.is_file()]
         selected = self._select_instructions(self.codex_home, scope=Scope.USER)
         if selected is not None:
-            paths.append(selected[0])
+            paths.append(selected.path)
         return paths
 
     def locate_project_config(self, project_root: Path) -> list[Path]:
@@ -144,7 +151,7 @@ class CodexCliAdapter:
                 paths.append(config_path)
             selected = self._select_instructions(directory, scope=Scope.PROJECT)
             if selected is not None:
-                paths.append(selected[0])
+                paths.append(selected.path)
         return paths
 
     def parse(
@@ -165,14 +172,14 @@ class CodexCliAdapter:
                     else Scope.PROJECT
                 )
             selected = self._select_instructions(path.parent, scope=scope)
-            if selected is None or selected[0] != path:
+            if selected is None or selected.path != path:
                 return []
             return [
                 Extension(
                     name=path.name,
                     origin_harness=self.source,
                     canonical_config=MemoryFileConfig(
-                        content=selected[1], is_persistent_memory=False
+                        content=selected.content, is_persistent_memory=False
                     ),
                 )
             ]
@@ -221,7 +228,7 @@ class CodexCliAdapter:
         layers: list[PrecedenceLayer] = []
         for path in (override_path, base_path):
             exists = path.is_file()
-            resolves = exists and selected is not None and path == selected[0]
+            resolves = exists and selected is not None and path == selected.path
             layers.append(
                 ConsultedLayer(
                     scope=scope,
