@@ -280,17 +280,20 @@ def test_parse_uses_selected_content_when_instruction_file_disappears(
 ) -> None:
     instructions = tmp_path / "AGENTS.md"
     instructions.write_text("Project instructions")
-    read_text = Path.read_text
 
-    def read_instructions(path: Path, *args: str, **kwargs: str) -> str:
-        content = read_text(path, *args, **kwargs)
+    def read_instructions(path: Path, *, encoding: str, errors: str) -> str:
+        with path.open(encoding=encoding, errors=errors) as stream:
+            content = stream.read()
         if path == instructions:
             path.unlink()
         return content
 
     monkeypatch.setattr(Path, "read_text", read_instructions)
 
-    assert adapter.parse(instructions)
+    extension, = adapter.parse(instructions)
+    canonical = extension.canonical_config
+    assert isinstance(canonical, MemoryFileConfig)
+    assert canonical.content == "Project instructions"
 
 
 def test_parse_returns_nothing_when_toml_is_malformed(
