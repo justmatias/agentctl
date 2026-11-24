@@ -5,6 +5,21 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .enums import ExtensionType
 
 
+class CodexMcpEnvironmentVariable(BaseModel):
+    name: str
+    source: Literal["local", "remote"] | None = None
+
+
+class CodexMcpOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bearer_token_env_var: str | None = None
+    env_http_headers: dict[str, str] | None = None
+    env_vars: list[str | CodexMcpEnvironmentVariable] | None = None
+    cwd: str | None = None
+    startup_timeout_sec: float | None = None
+
+
 class McpServerConfig(BaseModel):
     """Canonical shape for an MCP server, covering stdio and remote transports."""
 
@@ -16,6 +31,8 @@ class McpServerConfig(BaseModel):
     env: dict[str, str] = {}
     url: str | None = None
     headers: dict[str, str] = {}
+    enabled: bool = True
+    codex: CodexMcpOptions | None = None
 
     @model_validator(mode="after")
     def _require_command_or_url(self) -> "McpServerConfig":

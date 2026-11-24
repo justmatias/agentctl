@@ -1,5 +1,6 @@
 from .canonical_configs import (
     CanonicalConfig,
+    CodexMcpOptions,
     McpServerConfig,
     MemoryFileConfig,
     SkillConfig,
@@ -28,6 +29,7 @@ from .models import (
 __all__ = [
     "Binding",
     "CanonicalConfig",
+    "CodexMcpOptions",
     "Conflict",
     "ConflictResolution",
     "ConsultedLayer",

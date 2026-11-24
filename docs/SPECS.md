@@ -142,6 +142,17 @@ distinct from a harness, with its own adapter that:
   inside registered projects; the tool does not crawl the filesystem
   looking for projects on its own.
 
+MCP server activation (`enabled`, default true) is shared state. A disabled
+Codex server stays in the inventory, where its configuration can be inspected
+and serialized. The MCP JSON server format cannot express
+disabled state inside a server entry, so export to that format rejects disabled
+servers.
+
+Codex settings `bearer_token_env_var`, `env_http_headers`, `env_vars`, `cwd`,
+and `startup_timeout_sec` are stored as Codex options and round-trip through
+Codex TOML. The options follow Codex's transport and runtime semantics.
+Environment variable references are preserved as names.
+
 ## 7. Functional Requirements
 
 ### 7.1 Discovery / Inventory
