@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 from agentctl.adapters import (
     CodexCliAdapter,
@@ -224,10 +225,16 @@ def expected_managed_config_path(
     return directory / "managed_config.toml"
 
 
+class NestedProjectFiles(BaseModel):
+    root: Path
+    working_directory: Path
+    files: list[Path]
+
+
 @pytest.fixture(params=[False, True], ids=["repository", "worktree"])
 def nested_project_files(
     tmp_path: Path, request: pytest.FixtureRequest
-) -> tuple[Path, list[Path]]:
+) -> NestedProjectFiles:
     git_root = tmp_path / "repo"
     working_directory = git_root / "package" / "feature"
     working_directory.mkdir(parents=True)
@@ -249,11 +256,13 @@ def nested_project_files(
     for path in files:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("Example instructions" if path.suffix == ".md" else "")
-    return working_directory, files
+    return NestedProjectFiles(
+        root=git_root, working_directory=working_directory, files=files
+    )
 
 
 @pytest.fixture(params=["", " \n"], ids=["empty", "whitespace"])
-def _blank_global_override(
+def _write_blank_global_override(
     global_and_project_adapter: CodexCliAdapter, request: pytest.FixtureRequest
 ) -> None:
     override = global_and_project_adapter.codex_home / "AGENTS.override.md"

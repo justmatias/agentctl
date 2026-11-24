@@ -70,7 +70,8 @@ class CursorAdapter:
         candidates = self._candidate_paths(project_root, Scope.PROJECT)
         return [path for path in candidates if path.is_file()]
 
-    def parse(self, path: Path) -> list[Extension]:
+    def parse(self, path: Path, *, scope: Scope | None = None) -> list[Extension]:
+        del scope
         if not path.is_file():
             return []
         if path.name == "mcp.json":

@@ -81,8 +81,11 @@ class SourceAdapter(Protocol):
     def locate_project_config(self, project_root: Path) -> list[Path]:
         """Project-scope config files available for parsing from `project_root`."""
 
-    def parse(self, path: Path) -> list[Extension]:
-        """Parse a located file into canonical Extension records."""
+    def parse(self, path: Path, *, scope: Scope | None = None) -> list[Extension]:
+        """Parse a located file into canonical Extension records.
+
+        Pass the discovery scope when a path can belong to multiple scopes.
+        """
 
     def serialize(self, extension: Extension) -> str:
         """Render a canonical Extension into this source's native format."""

@@ -18,6 +18,7 @@ from agentctl.domain import (
     Scope,
     Source,
 )
+from tests.adapters.codex_cli.conftest import NestedProjectFiles
 
 
 def test_adapter_implements_the_source_protocol_when_instantiated(
@@ -66,7 +67,7 @@ def test_locate_global_config_omits_base_instructions_when_shadowed(
     }
 
 
-@pytest.mark.usefixtures("_blank_global_override")
+@pytest.mark.usefixtures("_write_blank_global_override")
 def test_locate_global_config_selects_base_when_override_is_blank(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
@@ -78,7 +79,7 @@ def test_locate_global_config_selects_base_when_override_is_blank(
     ]
 
 
-@pytest.mark.usefixtures("_blank_global_override")
+@pytest.mark.usefixtures("_write_blank_global_override")
 def test_parse_selects_global_base_when_override_is_blank(
     global_and_project_adapter: CodexCliAdapter,
 ) -> None:
@@ -86,23 +87,6 @@ def test_parse_selects_global_base_when_override_is_blank(
 
     assert adapter.parse(adapter.codex_home / "AGENTS.md")
     assert not adapter.parse(adapter.codex_home / "AGENTS.override.md")
-
-
-@pytest.mark.usefixtures("_blank_global_override")
-def test_precedence_chain_resolves_global_base_when_override_is_blank(
-    global_and_project_adapter: CodexCliAdapter,
-) -> None:
-    adapter = global_and_project_adapter
-    chain = adapter.precedence_chain(None)
-    instruction_layers = chain.layers[-2:]
-    resolution = [
-        (Path(layer.file_path), layer.resolves) for layer in instruction_layers
-    ]
-
-    assert resolution == [
-        (adapter.codex_home / "AGENTS.override.md", False),
-        (adapter.codex_home / "AGENTS.md", True),
-    ]
 
 
 @pytest.mark.usefixtures("_write_machine_wide_configs")
@@ -153,19 +137,32 @@ def test_parse_omits_project_instructions_when_override_is_blank(
     assert not adapter.parse(project_with_blank_override / "AGENTS.override.md")
 
 
-def test_precedence_chain_resolves_no_project_instructions_when_override_is_blank(
-    adapter: CodexCliAdapter, project_with_blank_override: Path
+@pytest.mark.parametrize(
+    ("scope", "override_content", "base_resolves"),
+    [(Scope.USER, "", True), (Scope.USER, " \n", True), (Scope.PROJECT, "", False)],
+)
+def test_precedence_chain_selects_instructions_when_override_is_blank(
+    adapter: CodexCliAdapter,
+    tmp_path: Path,
+    scope: Scope,
+    override_content: str,
+    base_resolves: bool,
 ) -> None:
-    chain = adapter.precedence_chain(project_with_blank_override)
-    instruction_layers = chain.layers[-2:]
-    resolution = [
-        (Path(layer.file_path), layer.resolves) for layer in instruction_layers
-    ]
+    directory = adapter.codex_home if scope == Scope.USER else tmp_path / "project"
+    directory.mkdir()
+    override = directory / "AGENTS.override.md"
+    override.write_text(override_content)
+    base = directory / "AGENTS.md"
+    base.write_text("Base instructions")
+    project_root = directory if scope == Scope.PROJECT else None
 
-    assert resolution == [
-        (project_with_blank_override / "AGENTS.override.md", False),
-        (project_with_blank_override / "AGENTS.md", False),
-    ]
+    chain = adapter.precedence_chain(project_root)
+
+    assert [
+        (Path(layer.file_path), layer.resolves)
+        for layer in chain.layers
+        if layer.scope == scope and Path(layer.file_path) in {override, base}
+    ] == [(override, False), (base, base_resolves)]
 
 
 def test_parse_respects_project_shadowing_when_codex_home_is_the_project(
@@ -176,8 +173,9 @@ def test_parse_respects_project_shadowing_when_codex_home_is_the_project(
     base.write_text("Global base instructions")
     (adapter.codex_home / "AGENTS.override.md").touch()
 
-    assert adapter.parse(base)
-    assert not adapter.parse(base, scope=Scope.PROJECT)
+    source_adapter: SourceAdapter = adapter
+    assert source_adapter.parse(base, scope=Scope.USER)
+    assert not source_adapter.parse(base, scope=Scope.PROJECT)
 
 
 def test_parse_returns_nothing_when_base_instructions_are_shadowed(
@@ -533,18 +531,19 @@ def test_default_codex_home_uses_dot_codex_when_variable_is_unset(
 
 
 def test_locate_project_config_stops_at_git_root_when_working_directory_is_nested(
-    adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
+    adapter: CodexCliAdapter, nested_project_files: NestedProjectFiles
 ) -> None:
-    working_directory, files = nested_project_files
+    working_directory = nested_project_files.working_directory
+    files = nested_project_files.files
 
     assert set(adapter.locate_project_config(working_directory)) == set(files)
 
 
 def test_precedence_chain_lists_instructions_root_first_when_working_directory_is_nested(
-    adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
+    adapter: CodexCliAdapter, nested_project_files: NestedProjectFiles
 ) -> None:
-    working_directory, _ = nested_project_files
-    project_root = working_directory.parent.parent
+    working_directory = nested_project_files.working_directory
+    project_root = nested_project_files.root
 
     chain = adapter.precedence_chain(working_directory)
 
@@ -562,9 +561,10 @@ def test_precedence_chain_lists_instructions_root_first_when_working_directory_i
 
 
 def test_precedence_chain_tags_ancestor_layers_when_working_directory_is_nested(
-    adapter: CodexCliAdapter, nested_project_files: tuple[Path, list[Path]]
+    adapter: CodexCliAdapter, nested_project_files: NestedProjectFiles
 ) -> None:
-    working_directory, files = nested_project_files
+    working_directory = nested_project_files.working_directory
+    files = nested_project_files.files
 
     chain = adapter.precedence_chain(working_directory)
 

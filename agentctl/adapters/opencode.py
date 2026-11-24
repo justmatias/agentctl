@@ -152,7 +152,8 @@ class OpenCodeAdapter:
             logger.warning(f"Skipping invalid OpenCode MCP entry {name!r} in {path}")
             return None
 
-    def parse(self, path: Path) -> list[Extension]:
+    def parse(self, path: Path, *, scope: Scope | None = None) -> list[Extension]:
+        del scope
         if (
             path.name not in (*CONFIG_FILENAMES, "AGENTS.md", "SKILL.md")
             or not path.is_file()

@@ -3,7 +3,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from itertools import count
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar
 
 from pydantic import BaseModel
 
@@ -154,9 +154,7 @@ class CodexCliAdapter:
                 paths.append(selected.path)
         return paths
 
-    def parse(
-        self, path: Path, *, scope: Literal[Scope.USER, Scope.PROJECT] | None = None
-    ) -> list[Extension]:
+    def parse(self, path: Path, *, scope: Scope | None = None) -> list[Extension]:
         """Parse a file using its instruction scope if supplied.
 
         Paths in Codex home default to user scope. Pass project scope when

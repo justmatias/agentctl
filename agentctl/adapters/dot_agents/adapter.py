@@ -57,7 +57,8 @@ class DotAgentsAdapter:
     def locate_project_config(cls, project_root: Path) -> list[Path]:
         return cls._locate_config(project_root, project=True)
 
-    def parse(self, path: Path) -> list[Extension]:
+    def parse(self, path: Path, *, scope: Scope | None = None) -> list[Extension]:
+        del scope
         if path.name not in {"AGENTS.md", "MEMORY.md"} or not path.is_file():
             return []
         return parse_memory_file(

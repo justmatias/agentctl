@@ -175,7 +175,8 @@ class ClaudeCodeAdapter:
             paths.extend(sorted(skills_directory.glob("*/SKILL.md")))
         return paths
 
-    def parse(self, path: Path) -> list[Extension]:
+    def parse(self, path: Path, *, scope: Scope | None = None) -> list[Extension]:
+        del scope
         if not path.is_file():
             return []
         if path.name == "SKILL.md":
