@@ -85,6 +85,23 @@ def _parse_mcp_servers(path: Path) -> list[Extension]:
     ]
 
 
+def _skill_paths(config_directory: Path) -> list[Path]:
+    skills = []
+    visited = set()
+    for directory, subdirectories, filenames in (config_directory / "skills").walk(
+        follow_symlinks=True
+    ):
+        target = directory.resolve()
+        if target in visited:
+            subdirectories.clear()
+            continue
+        visited.add(target)
+        subdirectories.sort()
+        if "SKILL.md" in filenames:
+            skills.append(directory / "SKILL.md")
+    return sorted(skills)
+
+
 @dataclass(kw_only=True)
 class OpenCodeAdapter:
     source: ClassVar[Source] = Source.OPENCODE
@@ -104,7 +121,7 @@ class OpenCodeAdapter:
         return [
             self.config_directory / "opencode.json",
             self.config_directory / "AGENTS.md",
-            *sorted((self.config_directory / "skills").rglob("SKILL.md")),
+            *_skill_paths(self.config_directory),
         ]
 
     @staticmethod
@@ -131,9 +148,7 @@ class OpenCodeAdapter:
             *(
                 (path, origin)
                 for directory, origin in reversed(directories)
-                for path in sorted(
-                    (directory / ".opencode" / "skills").rglob("SKILL.md")
-                )
+                for path in _skill_paths(directory / ".opencode")
             ),
         ]
 

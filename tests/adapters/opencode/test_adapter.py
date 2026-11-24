@@ -160,3 +160,33 @@ def test_parses_mcp_server_when_json_has_comments_and_trailing_commas(
     (extension,) = OpenCodeAdapter(config_directory=tmp_path).parse(config)
 
     assert extension.canonical_config == McpServerConfig(url="https://example.com/mcp")
+
+
+def test_locates_skill_when_skill_directory_is_symlinked(tmp_path: Path) -> None:
+    config_directory = tmp_path / "opencode"
+    skills = config_directory / "skills"
+    skills.mkdir(parents=True)
+    skill_directory = tmp_path / "shared" / "review"
+    skill_directory.mkdir(parents=True)
+    (skill_directory / "SKILL.md").touch()
+    linked_skill = skills / "review"
+    linked_skill.symlink_to(skill_directory, target_is_directory=True)
+
+    assert OpenCodeAdapter(
+        config_directory=config_directory
+    ).locate_global_config() == [
+        linked_skill / "SKILL.md",
+    ]
+
+
+def test_locates_skill_once_when_skill_tree_contains_symlink_cycle(
+    tmp_path: Path,
+) -> None:
+    skills = tmp_path / "skills"
+    skill_directory = skills / "review"
+    skill_directory.mkdir(parents=True)
+    skill = skill_directory / "SKILL.md"
+    skill.touch()
+    (skill_directory / "loop").symlink_to(skills, target_is_directory=True)
+
+    assert OpenCodeAdapter(config_directory=tmp_path).locate_global_config() == [skill]
