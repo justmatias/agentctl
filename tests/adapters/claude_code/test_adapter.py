@@ -446,3 +446,34 @@ def test_precedence_chain_ranks_agents_md_right_after_project_claude_md_when_set
         ranks[str(project_agents_md_path)]
         == ranks[str(empty_project_root / "CLAUDE.md")] + 1
     )
+
+
+def test_precedence_chain_skips_auto_memory_when_disabled(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, auto_memory_file: Path
+) -> None:
+    adapter.user_settings_path.write_text('{"autoMemoryEnabled": false}')
+
+    chain = adapter.precedence_chain(empty_project_root)
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(auto_memory_file)
+    )
+
+    assert isinstance(layer, NotConsultedLayer)
+
+
+def test_precedence_chain_skips_agents_md_when_its_plugin_is_disabled(
+    adapter: ClaudeCodeAdapter, empty_project_root: Path, project_agents_md_path: Path
+) -> None:
+    adapter.user_settings_path.parent.mkdir(parents=True, exist_ok=True)
+    adapter.user_settings_path.write_text(
+        '{"enabledPlugins":{"cc-plugin-agents-md@builtin":false},'
+        '"pluginConfigs":{"cc-plugin-agents-md@builtin":{"options":'
+        '{"instructionFiles":"claude-md-and-agents-md"}}}}'
+    )
+
+    chain = adapter.precedence_chain(empty_project_root)
+    layer = next(
+        layer for layer in chain.layers if layer.file_path == str(project_agents_md_path)
+    )
+
+    assert isinstance(layer, NotConsultedLayer)

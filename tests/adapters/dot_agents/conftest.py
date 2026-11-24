@@ -132,16 +132,12 @@ def _link_every_claude_instruction_path_to_shared(
 
 
 @pytest.fixture
-def _link_claude_and_shared_instructions_to_root_agents_md(
-    empty_project_root: Path, native_project_instructions: Path
+def _link_shared_instructions_to_root_agents_md(
+    empty_project_root: Path, claude_md_symlink_to_root_agents_md: Path
 ) -> None:
-    """CLAUDE.md and `.agents/AGENTS.md` both alias the root AGENTS.md."""
-    for path in (
-        empty_project_root / "CLAUDE.md",
-        empty_project_root / ".agents" / "AGENTS.md",
-    ):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.symlink_to(native_project_instructions)
+    path = empty_project_root / ".agents" / "AGENTS.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.symlink_to(claude_md_symlink_to_root_agents_md.readlink())
 
 
 @pytest.fixture

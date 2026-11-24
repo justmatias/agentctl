@@ -293,7 +293,7 @@ def test_consumption_report_resolves_shared_target_once_when_several_claude_path
 
 
 @pytest.mark.usefixtures(
-    "_link_claude_and_shared_instructions_to_root_agents_md",
+    "_link_shared_instructions_to_root_agents_md",
     "_enable_claude_agents_md_loading",
 )
 def test_consumption_report_resolves_file_once_when_claude_loads_it_through_symlink_and_directly(

@@ -38,6 +38,8 @@ from agentctl.utils import logger
 
 from .serializers import SERIALIZERS
 
+AGENTS_MD_PLUGIN_IDS = ("cc-plugin-agents-md@builtin", "agents-md@builtin")
+
 
 class InstructionFilesSetting(BaseModel):
     """The `instructionFiles` option of Claude's built-in AGENTS.md plugin.
@@ -51,8 +53,21 @@ class InstructionFilesSetting(BaseModel):
         validation_alias=AliasChoices(
             *(
                 AliasPath("pluginConfigs", plugin_id, "options", "instructionFiles")
-                for plugin_id in ("cc-plugin-agents-md@builtin", "agents-md@builtin")
+                for plugin_id in AGENTS_MD_PLUGIN_IDS
             )
+        ),
+    )
+
+
+class AutoMemorySetting(BaseModel):
+    enabled: bool | None = Field(default=None, validation_alias="autoMemoryEnabled")
+
+
+class AgentsMdPluginSetting(BaseModel):
+    enabled: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            *(AliasPath("enabledPlugins", plugin_id) for plugin_id in AGENTS_MD_PLUGIN_IDS)
         ),
     )
 
@@ -114,21 +129,27 @@ class ClaudeCodeAdapter:
         slug = re.sub(r"[^A-Za-z0-9]", "-", str(project_root))
         return self.home / ".claude" / "projects" / slug / "memory" / "MEMORY.md"
 
+    @staticmethod
+    def _read_settings[Settings: BaseModel](
+        path: Path, model: type[Settings]
+    ) -> Settings | None:
+        try:
+            if not path.is_file():
+                return None
+            return model.model_validate_json(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, UnicodeDecodeError, ValidationError) as error:
+            logger.warning(f"Skipping unreadable settings in {path}: {type(error).__name__}")
+            return None
+
     @property
     def instruction_files_setting(self) -> str | None:
         """The `instructionFiles` option, which Claude reads only from managed
         and user settings, managed first."""
         for path in (self.managed_settings_path, self.user_settings_path):
-            if not path.is_file():
-                continue
-            try:
-                setting = InstructionFilesSetting.model_validate_json(
-                    path.read_text(encoding="utf-8")
-                )
-            except (OSError, UnicodeDecodeError, ValidationError) as error:
-                logger.warning(f"Skipping unreadable settings in {path}: {error}")
-                continue
-            if setting.value is not None:
+            setting = self._read_settings(path, InstructionFilesSetting)
+            if setting is not None and setting.value is not None:
                 return setting.value
         return None
 
@@ -187,12 +208,22 @@ class ClaudeCodeAdapter:
             merge_semantics=MergeSemantics.OVERRIDE,
         )
 
+    @property
+    def agents_md_plugin_enabled(self) -> bool:
+        for path in (self.managed_settings_path, self.user_settings_path):
+            setting = self._read_settings(path, AgentsMdPluginSetting)
+            if setting is not None and setting.enabled is not None:
+                return setting.enabled
+        return True
+
     def _project_agents_md_layer(
         self, project_root: Path, ranks: Iterator[int]
     ) -> PrecedenceLayer:
         """The project AGENTS.md layer, as the `instructionFiles` setting decides."""
         path = project_root / "AGENTS.md"
-        setting = self.instruction_files_setting
+        setting = (
+            self.instruction_files_setting if self.agents_md_plugin_enabled else "claude-md"
+        )
         if setting == "claude-md-and-agents-md":
             return consulted_file_layer(
                 scope=Scope.PROJECT,
@@ -209,6 +240,18 @@ class ClaudeCodeAdapter:
             exists=path.is_file(),
             origin=LayerOrigin.REGISTERED_PROJECT,
         )
+
+    def auto_memory_enabled(self, project_root: Path) -> bool:
+        for path in (
+            self.managed_settings_path,
+            self.local_settings_path(project_root),
+            self.project_settings_path(project_root),
+            self.user_settings_path,
+        ):
+            setting = self._read_settings(path, AutoMemorySetting)
+            if setting is not None and setting.enabled is not None:
+                return setting.enabled
+        return True
 
     def precedence_chain(self, project_root: Path | None) -> PrecedenceChain:
         layers: list[PrecedenceLayer] = [
@@ -282,14 +325,25 @@ class ClaudeCodeAdapter:
             )
         )
         if project_root is not None:
-            layers.append(
-                consulted_file_layer(
-                    scope=Scope.USER,
-                    path=self.auto_memory_path(project_root),
-                    origin=LayerOrigin.REGISTERED_PROJECT,
-                    order_rank=next(ranks),
+            memory_path = self.auto_memory_path(project_root)
+            if self.auto_memory_enabled(project_root):
+                layers.append(
+                    consulted_file_layer(
+                        scope=Scope.USER,
+                        path=memory_path,
+                        origin=LayerOrigin.REGISTERED_PROJECT,
+                        order_rank=next(ranks),
+                    )
                 )
-            )
+            else:
+                layers.append(
+                    NotConsultedLayer(
+                        scope=Scope.USER,
+                        file_path=str(memory_path),
+                        exists=memory_path.is_file(),
+                        origin=LayerOrigin.REGISTERED_PROJECT,
+                    )
+                )
         else:
             agents_path = self.home / "AGENTS.md"
             layers.append(
