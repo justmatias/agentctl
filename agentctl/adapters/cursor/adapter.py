@@ -11,6 +11,7 @@ from agentctl.adapters.common import (
 from agentctl.adapters.protocol import (
     AdapterCapabilities,
     MergeSemantics,
+    ScopedConfigPath,
     WalkUpBehavior,
     WalkUpStop,
     WorkflowTargetForm,
@@ -61,6 +62,9 @@ class CursorAdapter:
                 root / ".cursorrules",
             ])
         return paths
+
+    def locate_scoped_global_config(self) -> list[ScopedConfigPath]:
+        return [ScopedConfigPath(path, Scope.USER) for path in self.locate_global_config()]
 
     def locate_global_config(self) -> list[Path]:
         candidates = self._candidate_paths(self.home, Scope.USER)

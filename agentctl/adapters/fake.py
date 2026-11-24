@@ -5,6 +5,7 @@ from agentctl.domain import Extension, ExtensionType, PrecedenceChain, Scope, So
 from .protocol import (
     AdapterCapabilities,
     MergeSemantics,
+    ScopedConfigPath,
     WalkUpBehavior,
     WalkUpStop,
     WorkflowTargetForm,
@@ -34,6 +35,10 @@ class NullAdapter:
             scopes=scopes,
             workflow_target_forms=workflow_target_forms,
         )
+
+    @staticmethod
+    def locate_scoped_global_config() -> list[ScopedConfigPath]:
+        return []
 
     @staticmethod
     def locate_global_config() -> list[Path]:

@@ -22,6 +22,7 @@ from .opencode import OpenCodeAdapter
 from .protocol import (
     AdapterCapabilities,
     MergeSemantics,
+    ScopedConfigPath,
     SourceAdapter,
     WalkUpBehavior,
     WalkUpStop,
@@ -39,6 +40,7 @@ __all__ = [
     "MergeSemantics",
     "NullAdapter",
     "OpenCodeAdapter",
+    "ScopedConfigPath",
     "Serializer",
     "SourceAdapter",
     "WalkUpBehavior",

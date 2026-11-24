@@ -32,6 +32,7 @@ class Scope(StrEnum):
 class SyncState(StrEnum):
     """Whether a binding's on-disk content matches what the tool last wrote."""
 
+    UNADOPTED = "unadopted"
     IN_SYNC = "in_sync"
     DRIFTED = "drifted"
     CONFLICT = "conflict"

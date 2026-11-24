@@ -18,6 +18,7 @@ from agentctl.adapters.common import (
 from agentctl.adapters.protocol import (
     AdapterCapabilities,
     MergeSemantics,
+    ScopedConfigPath,
     WalkUpBehavior,
     WalkUpStop,
     WorkflowTargetForm,
@@ -152,6 +153,18 @@ class ClaudeCodeAdapter:
             if setting is not None and setting.value is not None:
                 return setting.value
         return None
+
+    def locate_scoped_global_config(self) -> list[ScopedConfigPath]:
+        paths = [ScopedConfigPath(path, Scope.USER) for path in self.locate_global_config()]
+        paths.extend(
+            ScopedConfigPath(path, Scope.USER)
+            for path in (self.home / ".claude" / "skills").glob("*/SKILL.md")
+            if path.is_file()
+        )
+        managed_mcp_path = self.managed_settings_path.with_name("managed-mcp.json")
+        if managed_mcp_path.is_file():
+            paths.append(ScopedConfigPath(managed_mcp_path, Scope.MANAGED))
+        return paths
 
     def locate_global_config(self) -> list[Path]:
         candidates = [

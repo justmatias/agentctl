@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v16.5.0 (2026-11-24)
+
+### Bug Fixes
+
+- **inventory**: Discover Claude skills and hash bundled files
+  ([`a6cc353`](https://github.com/justmatias/agentctl/commit/a6cc35394188292cc0456fa97c4c811453235907))
+
+### Features
+
+- **inventory**: Scan installed agent extensions
+  ([`8d214e1`](https://github.com/justmatias/agentctl/commit/8d214e17b2f6e0573d7a586bdea10dbcb8344480))
+
+### Refactoring
+
+- **inventory**: Isolate observation reads by config path
+  ([`010cee0`](https://github.com/justmatias/agentctl/commit/010cee01376d2413597e336afa0195ffe48b1451))
+
+
 ## v16.4.2 (2026-11-24)
 
 ### Bug Fixes
