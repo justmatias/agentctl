@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v16.4.1 (2026-11-24)
+
+### Bug Fixes
+
+- **adapters**: Expose scope through the shared parser
+  ([`4f76332`](https://github.com/justmatias/agentctl/commit/4f7633230a0f877e518036b4c09203d9169b8ac2))
+
+- **codex**: Align instruction ordering and shadowing
+  ([`6ac3641`](https://github.com/justmatias/agentctl/commit/6ac36413f1c2623cd358cd497b8a34933ba34c13))
+
+- **codex**: Match instruction decoding to Codex
+  ([`14396bc`](https://github.com/justmatias/agentctl/commit/14396bcf0fd9f9e1c16fe958a1a228437b744c86))
+
+- **codex**: Omit blank project instruction content
+  ([`4335c98`](https://github.com/justmatias/agentctl/commit/4335c982ac00f2f1202baa2213910486b50e8639))
+
+- **codex**: Parse the selected instruction content once
+  ([`f14f94b`](https://github.com/justmatias/agentctl/commit/f14f94b2218bca8d32842410a5cbc41687f14f8f))
+
+- **codex**: Skip blank global instruction overrides
+  ([`7358734`](https://github.com/justmatias/agentctl/commit/73587345f15921ed5fe3a94fbbe475d04bcfc3d4))
+
+### Refactoring
+
+- **codex**: Clarify layer resolution and regression tests
+  ([`10c4ab0`](https://github.com/justmatias/agentctl/commit/10c4ab0f1b9c07801809b2093e0dcf84ac07fd71))
+
+- **codex**: Name the selected instruction fields
+  ([`069999e`](https://github.com/justmatias/agentctl/commit/069999e18ed3060e2d1ebe2564cb54f74a67a18e))
+
+
 ## v16.4.0 (2026-11-24)
 
 ### Bug Fixes
